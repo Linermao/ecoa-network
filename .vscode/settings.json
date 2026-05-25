@@ -1,0 +1,17 @@
+{
+  "cmake.sourceDirectory": "${workspaceFolder}/example",
+  "cmake.buildDirectory": "${workspaceFolder}/build/example",
+  "cmake.generator": "Ninja",
+  "cmake.configureOnOpen": true,
+  "cmake.configureArgs": [
+    "-DCMAKE_BUILD_TYPE=Debug",
+    "-DAPR_INCLUDE_DIR=${env:APR_INCLUDE_DIR}",
+    "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON"
+  ],
+  "C_Cpp.intelliSenseEngine": "disabled",
+  "C_Cpp.default.configurationProvider": "ms-vscode.cmake-tools",
+  "C_Cpp.default.compileCommands": "${workspaceFolder}/build/example/compile_commands.json",
+  "clangd.arguments": [
+    "--compile-commands-dir=${workspaceFolder}/build/example"
+  ]
+}
