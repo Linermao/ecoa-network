@@ -1,13 +1,19 @@
 ## 编译并运行 example
 
-```bash
-cmake -S example -B build/example \
-  -G Ninja \
-  -DAPR_INCLUDE_DIR="$APR_INCLUDE_DIR" \
-  -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+`example/` 现在是一个接近真实生成平台结构的 demo，而不是单文件 smoke test。
 
+它会构建三个可执行文件：
+
+- `platform`：main platform，负责启动 PD 进程并进入 `ldp_start_father_server()`
+- `PD_sender_PD`：发送端 protection domain，启动自己的 `ldp_start_comp_server()`
+- `PD_RECEIVER_PD`：接收端 protection domain，启动自己的 `ldp_start_comp_server()`
+
+运行 `platform` 后，它会用 `apr_proc_create()` 拉起两个 PD 进程。随后 sender PD 通过 LDP-DDS 发送一条业务消息给 receiver PD，receiver PD 通过 router 打印 payload，最后 sender PD 发送 kill 控制消息让 receiver 和 main platform 退出。
+
+```bash
 cmake --build build/example
-./build/example/platform
+
+CYCLONEDDS_URI=file://$PWD/example/cyclonedds-loopback.xml ./build/example/platform
 ```
 
 ## 单独编译 lib

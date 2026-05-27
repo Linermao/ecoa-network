@@ -1,0 +1,16 @@
+module LDP_DDS {
+  @final
+  enum PacketKind {
+    LDP_DDS_PACKET_DATA,
+    LDP_DDS_PACKET_CONTROL,
+    LDP_DDS_PACKET_FAULT
+  };
+
+  @final
+  struct Packet {
+    unsigned long source_port;
+    unsigned long target_port;
+    PacketKind kind;
+    sequence<octet> payload;
+  };
+};

@@ -17,6 +17,7 @@ else()
 endif()
 
 if(${CMAKE_USE_DDS_PROTO})
+	find_package(CycloneDDS REQUIRED)
 	file(GLOB ${PROJECT_NAME}_proto_src dds/*.c)
 elseif(${CMAKE_USE_UDP_PROTO})
 	file(GLOB ${PROJECT_NAME}_proto_src udp/*.c)
@@ -46,6 +47,13 @@ endif()
 
 #####################
 add_library(ecoa ${LDP_LINK_TYPE} ${${PROJECT_NAME}_src} ${${PROJECT_NAME}_platform_src} ${${PROJECT_NAME}_proto_src})
+
+if(${CMAKE_USE_DDS_PROTO})
+	idlc_generate(
+		TARGET ldp_dds_packet_idl
+		FILES ${CMAKE_CURRENT_LIST_DIR}/dds/ldp_dds_packet.idl)
+	target_link_libraries(ecoa PRIVATE ldp_dds_packet_idl CycloneDDS::ddsc)
+endif()
 
 if(${CMAKE_USE_DDS_PROTO})
 	target_compile_definitions(ecoa PUBLIC USE_DDS_PROTO=1 USE_UDP_PROTO=0)
