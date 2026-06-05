@@ -1,5 +1,6 @@
 #include "ldp_dds_internal.h"
 
+#include <inttypes.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -10,6 +11,8 @@
 #include "ldp_log_platform.h"
 #include "ldp_network.h"
 #include "ldp_structures.h"
+#include "ldp_ELI.h"
+#include "ldp_ELI_udp.h"
 
 static ldp_interface_dds* dds_local(ldp_interface_ctx* interface_ctx)
 {
@@ -33,6 +36,169 @@ static uint32_t dds_port_or_zero(const ldp_socket_info* info)
 	return info != NULL && info->port > 0 ? (uint32_t)info->port : 0;
 }
 
+bool ldp_dds_trace_enabled(void)
+{
+	const char* value = getenv("LDP_DDS_TRACE");
+
+	return value != NULL &&
+	       value[0] != '\0' &&
+	       strcmp(value, "0") != 0 &&
+	       strcmp(value, "false") != 0 &&
+	       strcmp(value, "FALSE") != 0;
+}
+
+const char* ldp_dds_trace_kind_name(LDP_DDS_PacketKind kind)
+{
+	switch (kind) {
+		case LDP_DDS_LDP_DDS_PACKET_DATA:
+			return "DATA";
+		case LDP_DDS_LDP_DDS_PACKET_CONTROL:
+			return "CONTROL";
+		case LDP_DDS_LDP_DDS_PACKET_FAULT:
+			return "FAULT";
+		default:
+			return "UNKNOWN";
+	}
+}
+
+uint32_t ldp_dds_trace_op_id(const LDP_DDS_Packet* packet)
+{
+	uint32_t op_ID = 0;
+	bool control_word = true;
+
+	if (packet == NULL || packet->payload._buffer == NULL || packet->payload._length == 0) {
+		return 0;
+	}
+
+	if (packet->payload._length <= sizeof(uint32_t)) {
+		for (uint32_t i = 1; i < packet->payload._length; ++i) {
+			if (packet->payload._buffer[i] != 0) {
+				control_word = false;
+				break;
+			}
+		}
+		if (control_word) {
+			return packet->payload._buffer[0];
+		}
+	}
+
+	if (packet->payload._length >= LDP_HEADER_TCP_SIZE &&
+	    packet->payload._buffer[0] == 0xE &&
+	    packet->payload._buffer[1] == 0xC &&
+	    packet->payload._buffer[2] == 0x0 &&
+	    packet->payload._buffer[3] == 0xA) {
+		memcpy(&op_ID, &packet->payload._buffer[8], LDP_OP_ID_SIZE);
+		return op_ID;
+	}
+
+	if (packet->payload._length >= LDP_ELI_UDP_HEADER_SIZE + LDP_ELI_HEADER_SIZE &&
+	    packet->payload._buffer[LDP_ELI_UDP_HEADER_SIZE] == LDP_ELI_VERSION) {
+		memcpy(&op_ID,
+		       &packet->payload._buffer[LDP_ELI_UDP_HEADER_SIZE + 8],
+		       sizeof(op_ID));
+		return op_ID;
+	}
+
+	return 0;
+}
+
+void ldp_dds_trace_packet(const char* stage,
+                          const char* owner,
+                          int interface_index,
+                          const LDP_DDS_Packet* packet)
+{
+	if (!ldp_dds_trace_enabled() || packet == NULL) {
+		return;
+	}
+
+	fprintf(stderr,
+	        "[DDS %s] owner=%s iface=%d source=%" PRIu32 " target=%" PRIu32
+	        " module=%" PRIu16 " msg=%" PRIu16 " kind=%s op=%" PRIu32
+	        " size=%" PRIu32 "\n",
+	        stage != NULL ? stage : "?",
+	        owner != NULL ? owner : "?",
+	        interface_index,
+	        packet->source_port,
+	        packet->target_port,
+	        packet->module_id,
+	        packet->msg_id,
+	        ldp_dds_trace_kind_name(packet->kind),
+	        ldp_dds_trace_op_id(packet),
+	        packet->payload._length);
+}
+
+static LDP_DDS_PacketKind dds_packet_kind_from_payload(const char* payload,
+                                                       int payload_size)
+{
+	uint32_t op_ID = 0;
+	bool control_word = true;
+
+	if (payload == NULL || payload_size <= 0) {
+		return LDP_DDS_LDP_DDS_PACKET_DATA;
+	}
+
+	if ((uint8_t)payload[0] == LDP_ID_CLIENT_FAULT_ERROR) {
+		return LDP_DDS_LDP_DDS_PACKET_FAULT;
+	}
+
+	if (payload_size == 1) {
+		switch ((uint8_t)payload[0]) {
+			case LDP_ID_CLIENT_INIT:
+			case LDP_ID_CLIENT_READY:
+			case LDP_ID_KILL:
+			case LDP_ID_SHUTDOWN:
+				return LDP_DDS_LDP_DDS_PACKET_CONTROL;
+			case LDP_ID_CLIENT_FAULT_ERROR:
+				return LDP_DDS_LDP_DDS_PACKET_FAULT;
+			default:
+				return LDP_DDS_LDP_DDS_PACKET_DATA;
+		}
+	}
+
+	if (payload_size <= (int)sizeof(uint32_t)) {
+		for (int i = 1; i < payload_size; ++i) {
+			if (payload[i] != 0) {
+				control_word = false;
+				break;
+			}
+		}
+
+		if (control_word) {
+			switch ((uint8_t)payload[0]) {
+				case LDP_ID_CLIENT_INIT:
+				case LDP_ID_CLIENT_READY:
+				case LDP_ID_KILL:
+				case LDP_ID_SHUTDOWN:
+					return LDP_DDS_LDP_DDS_PACKET_CONTROL;
+				default:
+					break;
+			}
+		}
+	}
+
+	if (payload_size >= LDP_HEADER_TCP_SIZE &&
+	    payload[0] == 0xE &&
+	    payload[1] == 0xC &&
+	    payload[2] == 0x0 &&
+	    payload[3] == 0xA) {
+		memcpy(&op_ID, &payload[8], LDP_OP_ID_SIZE);
+		switch (op_ID) {
+			case LDP_ID_INIT_MOD:
+			case LDP_ID_START_MOD:
+			case LDP_ID_KILL:
+			case LDP_ID_SHUTDOWN:
+			case LDP_ID_SYNC:
+				return LDP_DDS_LDP_DDS_PACKET_CONTROL;
+			case LDP_ID_CLIENT_FAULT_ERROR:
+				return LDP_DDS_LDP_DDS_PACKET_FAULT;
+			default:
+				return LDP_DDS_LDP_DDS_PACKET_DATA;
+		}
+	}
+
+	return LDP_DDS_LDP_DDS_PACKET_DATA;
+}
+
 static bool dds_target_port_filter(const void* sample, void* arg)
 {
 	const LDP_DDS_Packet* packet = (const LDP_DDS_Packet*)sample;
@@ -51,7 +217,7 @@ static bool dds_target_port_filter(const void* sample, void* arg)
 	return false;
 }
 
-static ldp_status_t dds_runtime_add_target_port(ldp_dds_runtime* runtime, uint32_t port)
+ldp_status_t ldp_dds_runtime_add_target_port(ldp_dds_runtime* runtime, uint32_t port)
 {
 	if (runtime == NULL || port == 0) {
 		return LDP_ERROR;
@@ -75,6 +241,7 @@ static ldp_status_t dds_runtime_add_target_port(ldp_dds_runtime* runtime, uint32
 static ldp_status_t dds_create_runtime(ldp_dds_runtime** runtime_out)
 {
 	ldp_dds_runtime* runtime = calloc(1, sizeof(*runtime));
+	dds_qos_t* qos = NULL;
 	dds_return_t ret;
 	if (runtime == NULL) {
 		return LDP_ERROR;
@@ -121,12 +288,23 @@ static ldp_status_t dds_create_runtime(ldp_dds_runtime** runtime_out)
 		return LDP_ERROR;
 	}
 
+	qos = dds_create_qos();
+	if (qos == NULL) {
+		dds_delete(runtime->participant);
+		free(runtime);
+		return LDP_ERROR;
+	}
+	dds_qset_reliability(qos, DDS_RELIABILITY_RELIABLE, DDS_SECS(1));
+	dds_qset_durability(qos, DDS_DURABILITY_TRANSIENT_LOCAL);
+	dds_qset_history(qos, DDS_HISTORY_KEEP_LAST, 32);
+
 	runtime->data_writer = dds_create_writer(runtime->participant,
 	                                         runtime->data_write_topic,
-	                                         NULL,
+	                                         qos,
 	                                         NULL);
 	if (runtime->data_writer < 0) {
 		dds_log_error("dds_create_writer", runtime->data_writer);
+		dds_delete_qos(qos);
 		dds_delete(runtime->participant);
 		free(runtime);
 		return LDP_ERROR;
@@ -134,8 +312,9 @@ static ldp_status_t dds_create_runtime(ldp_dds_runtime** runtime_out)
 
 	runtime->data_reader = dds_create_reader(runtime->participant,
 	                                         runtime->data_read_topic,
-	                                         NULL,
+	                                         qos,
 	                                         NULL);
+	dds_delete_qos(qos);
 	if (runtime->data_reader < 0) {
 		dds_log_error("dds_create_reader", runtime->data_reader);
 		dds_delete(runtime->participant);
@@ -191,8 +370,6 @@ static ldp_status_t dds_publish_bytes(ldp_interface_dds* interface,
 	LDP_DDS_Packet packet;
 	dds_return_t ret;
 
-	UNUSED(data_w);
-
 	if (interface == NULL || interface->backend == NULL || !interface->initialized) {
 		return LDP_ERROR;
 	}
@@ -204,15 +381,56 @@ static ldp_status_t dds_publish_bytes(ldp_interface_dds* interface,
 	memset(&packet, 0, sizeof(packet));
 	packet.source_port = dds_port_or_zero(interface->info_r);
 	packet.target_port = dds_port_or_zero(interface->info_w != NULL ? interface->info_w : interface->info_r);
+	if (data_w != NULL) {
+		data_w->msg_id++;
+		packet.module_id = data_w->module_id;
+		packet.msg_id = data_w->msg_id;
+	}
+	packet.kind = dds_packet_kind_from_payload(payload, payload_size);
+	packet.payload._maximum = (uint32_t)payload_size;
+	packet.payload._length = (uint32_t)payload_size;
+	packet.payload._buffer = (uint8_t*)payload;
+	packet.payload._release = false;
+
+	ldp_dds_trace_packet("write", interface->role == LDP_DDS_ROLE_MAIN ? "main" : "component", -1, &packet);
+
+	ret = dds_write(interface->backend->runtime->data_writer, &packet);
+	if (ret < 0) {
+		return dds_log_error("dds_write", ret);
+	}
+
+	return LDP_SUCCESS;
+}
+
+static ldp_status_t dds_publish_mcast_datagram(ldp_inter_mcast* interface,
+                                               char* payload,
+                                               uint64_t payload_size)
+{
+	LDP_DDS_Packet packet;
+	dds_return_t ret;
+
+	if (interface == NULL || payload == NULL || payload_size > UINT32_MAX) {
+		return LDP_ERROR;
+	}
+
+	if (g_runtime == NULL && dds_acquire_runtime(&g_runtime) != LDP_SUCCESS) {
+		return LDP_ERROR;
+	}
+
+	memset(&packet, 0, sizeof(packet));
+	packet.source_port = interface->UDP_current_PF_ID;
+	packet.target_port = dds_port_or_zero(interface->ip_info);
 	packet.kind = LDP_DDS_LDP_DDS_PACKET_DATA;
 	packet.payload._maximum = (uint32_t)payload_size;
 	packet.payload._length = (uint32_t)payload_size;
 	packet.payload._buffer = (uint8_t*)payload;
 	packet.payload._release = false;
 
-	ret = dds_write(interface->backend->runtime->data_writer, &packet);
+	ldp_dds_trace_packet("write.mcast", "eli", -1, &packet);
+
+	ret = dds_write(g_runtime->data_writer, &packet);
 	if (ret < 0) {
-		return dds_log_error("dds_write", ret);
+		return dds_log_error("dds_write(mcast)", ret);
 	}
 
 	return LDP_SUCCESS;
@@ -223,6 +441,8 @@ ldp_status_t ldp_create_interface_dds(ldp_interface_dds* interface, apr_pool_t* 
 	ldp_socket_info* info_r = NULL;
 	ldp_socket_info* info_w = NULL;
 	ldp_dds_role role = LDP_DDS_ROLE_UNSET;
+	bool owns_info_r = false;
+	bool owns_info_w = false;
 	ldp_dds_backend* backend = NULL;
 	ldp_dds_runtime* runtime = NULL;
 
@@ -235,10 +455,14 @@ ldp_status_t ldp_create_interface_dds(ldp_interface_dds* interface, apr_pool_t* 
 	info_r = interface->info_r;
 	info_w = interface->info_w;
 	role = interface->role;
+	owns_info_r = interface->owns_info_r;
+	owns_info_w = interface->owns_info_w;
 	memset(interface, 0, sizeof(*interface));
 	interface->info_r = info_r;
 	interface->info_w = info_w;
 	interface->role = role;
+	interface->owns_info_r = owns_info_r;
+	interface->owns_info_w = owns_info_w;
 	interface->initialized = false;
 
 	backend = calloc(1, sizeof(*backend));
@@ -251,7 +475,7 @@ ldp_status_t ldp_create_interface_dds(ldp_interface_dds* interface, apr_pool_t* 
 		return LDP_ERROR;
 	}
 
-	if (dds_runtime_add_target_port(runtime, dds_port_or_zero(info_r)) != LDP_SUCCESS) {
+	if (ldp_dds_runtime_add_target_port(runtime, dds_port_or_zero(info_r)) != LDP_SUCCESS) {
 		dds_release_runtime(runtime);
 		free(backend);
 		return LDP_ERROR;
@@ -263,21 +487,9 @@ ldp_status_t ldp_create_interface_dds(ldp_interface_dds* interface, apr_pool_t* 
 	return LDP_SUCCESS;
 }
 
-ldp_status_t ldp_dds_prepare_interface_ctx(ldp_interface_ctx* interface_ctx,
-                                           ldp_socket_info* info_r,
-                                           ldp_socket_info* info_w,
-                                           ldp_dds_role role,
-                                           apr_pool_t* mp)
+ldp_status_t ldp_dds_mcast_send(ldp_inter_mcast* interface, char* msg, uint64_t msg_size)
 {
-	if (interface_ctx == NULL || info_r == NULL) {
-		return LDP_ERROR;
-	}
-
-	interface_ctx->type = LDP_LOCAL_IP;
-	interface_ctx->inter.local.info_r = info_r;
-	interface_ctx->inter.local.info_w = info_w != NULL ? info_w : info_r;
-	interface_ctx->inter.local.role = role;
-	return ldp_create_interface_dds(&interface_ctx->inter.local, mp);
+	return dds_publish_mcast_datagram(interface, msg, msg_size);
 }
 
 ldp_dds_runtime* ldp_dds_get_runtime(ldp_interface_dds* interface)
@@ -299,6 +511,17 @@ void ldp_destroy_interface_dds(ldp_interface_dds* interface)
 		free(interface->backend);
 	}
 
+	if (interface->owns_info_r && interface->info_r != NULL) {
+		free(interface->info_r);
+	}
+	if (interface->owns_info_w && interface->info_w != NULL) {
+		free(interface->info_w);
+	}
+
+	interface->info_r = NULL;
+	interface->info_w = NULL;
+	interface->owns_info_r = false;
+	interface->owns_info_w = false;
 	interface->backend = NULL;
 	interface->initialized = false;
 }
@@ -346,6 +569,10 @@ ldp_status_t ldp_dds_deliver_to_component(ldp_PDomain_ctx* ctx,
 	UNUSED(payload_size);
 
 	if (ctx == NULL || interface_ctx == NULL || payload == NULL) {
+		return LDP_ERROR;
+	}
+
+	if (payload_size < LDP_HEADER_TCP_SIZE) {
 		return LDP_ERROR;
 	}
 

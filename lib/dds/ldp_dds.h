@@ -23,6 +23,7 @@ extern "C" {
 
 typedef struct ldp_socket_info ldp_socket_info;       //!< defined in ldp_network.h
 typedef struct ldp_interface_ctx ldp_interface_ctx;   //!< defined in ldp_network.h
+typedef struct ldp_inter_mcast ldp_inter_mcast;       //!< defined in ldp_multicast.h
 typedef struct ldp_Main_ctx_t ldp_Main_ctx;           //!< defined in ldp_structures.h
 typedef struct ldp_PDomain_ctx_t ldp_PDomain_ctx;     //!< defined in ldp_structures.h
 
@@ -42,17 +43,19 @@ typedef struct ldp_interface_dds {
 	ldp_dds_backend* backend;
 	ldp_dds_role role;
 	bool initialized;
+	bool owns_info_r;
+	bool owns_info_w;
 } ldp_interface_dds;
 
 //! Per-module write data. Kept shape-compatible with TCP/UDP call sites.
 typedef struct net_data_w_dds {
-	char reserved[1];
 	ECOA__uint16 module_id;
 	ECOA__uint16 msg_id;
 } net_data_w_dds;
 
 ldp_status_t ldp_create_interface_dds(ldp_interface_dds* interface, apr_pool_t* mp);
 void ldp_destroy_interface_dds(ldp_interface_dds* interface);
+ldp_status_t ldp_dds_mcast_send(ldp_inter_mcast* interface, char* msg, uint64_t msg_size);
 
 /**
  * Entry point for a DDS reader callback delivering a full LDP payload to a PD.

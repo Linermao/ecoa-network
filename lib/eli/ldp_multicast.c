@@ -98,6 +98,20 @@ apr_status_t ldp_mcast_send(ldp_inter_mcast* interface,
                       char* msg,
                       uint64_t* msg_size,
                       ldp_logger_platform* logger_PF){
+#if USE_DDS_PROTO
+    UNUSED(logger_PF);
+
+    if (msg_size == NULL) {
+        return LDP_ERROR;
+    }
+
+    if (ldp_dds_mcast_send(interface, msg, *msg_size) != LDP_SUCCESS) {
+        *msg_size = 0;
+        return LDP_ERROR;
+    }
+
+    return APR_SUCCESS;
+#else
     if (interface->socket == NULL){
       ldp_log_PF_log_var(ECOA_LOG_ERROR_PF,"ERROR", logger_PF,
                            "multicast error (%s:%i) : socket doesn't exist",
@@ -113,6 +127,7 @@ apr_status_t ldp_mcast_send(ldp_inter_mcast* interface,
         ldp_IP_print_err(ret, logger_PF, interface->ip_info);
     }
     return ret;
+#endif
 }
 
 apr_status_t ldp_mcast_read(ldp_inter_mcast* interface,

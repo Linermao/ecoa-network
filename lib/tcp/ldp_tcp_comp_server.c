@@ -43,7 +43,7 @@
  * @return     ldp status
  */
 static ldp_status_t sent_msg_to_father(ldp_PDomain_ctx* ctx, uint8_t op_ID){
-	net_data_w data_w;
+	net_data_w data_w = {0};
 	apr_status_t ret=ldp_IP_write(&ctx->interface_ctx_array[ctx->nb_client],(char*) &op_ID, sizeof(uint8_t), &data_w);
 	if(ret != APR_SUCCESS){
 		return ret;

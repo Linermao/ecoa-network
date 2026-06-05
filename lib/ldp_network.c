@@ -120,7 +120,7 @@ ldp_status_t ldp_send_fault_error_to_father(ldp_PDomain_ctx* ctx,
                                                 ECOA__asset_type asset_type,
                                                 ECOA__error_type error_type,
                                                 ECOA__uint32 error_code){
-	net_data_w data_w;
+	net_data_w data_w = {0};
 #if USE_UDP_PROTO
 	data_w.module_id = 0x01;
 #endif
@@ -140,7 +140,7 @@ ldp_status_t write_msg(ldp_logger_platform* logger_PF,
 	char msg[LDP_HEADER_TCP_SIZE];
 	ldp_written_IP_header(msg, 0, msg_ID);
 
-	net_data_w data_w;
+	net_data_w data_w = {0};
 #if USE_UDP_PROTO
 	data_w.module_id = 0x01;
 #endif

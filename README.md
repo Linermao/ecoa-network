@@ -1,24 +1,78 @@
-## 编译并运行 example
+## Requirements
 
-`example/` 现在是一个接近真实生成平台结构的 demo，而不是单文件 smoke test。
+需要 CMake、Ninja、APR 和 CycloneDDS。进入开发环境后，确认 `APR_INCLUDE_DIR` 指向 APR 头文件目录。
 
-它会构建三个可执行文件：
+## Example
 
-- `platform`：main platform，负责启动 PD 进程并进入 `ldp_start_father_server()`
-- `PD_sender_PD`：发送端 protection domain，启动自己的 `ldp_start_comp_server()`
-- `PD_RECEIVER_PD`：接收端 protection domain，启动自己的 `ldp_start_comp_server()`
+`example/` 是一个接近真实生成平台结构的 DDS demo。它会构建：
 
-运行 `platform` 后，它会用 `apr_proc_create()` 拉起两个 PD 进程。随后 sender PD 通过 LDP-DDS 发送一条业务消息给 receiver PD，receiver PD 通过 router 打印 payload，最后 sender PD 发送 kill 控制消息让 receiver 和 main platform 退出。
+- `platform`
+- `PD_sender_PD`
+- `PD_receiver_PD`
+
+首次配置：
+
+```bash
+cmake -S example -B build/example \
+  -G Ninja \
+  -DAPR_INCLUDE_DIR="$APR_INCLUDE_DIR" \
+  -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+```
+
+编译：
 
 ```bash
 cmake --build build/example
-
-CYCLONEDDS_URI=file://$PWD/example/cyclonedds-loopback.xml ./build/example/platform
 ```
 
-## 单独编译 lib
+运行：
 
-如果只想确认库本身能否编译：
+```bash
+CYCLONEDDS_URI=file://$PWD/example/cyclonedds-loopback.xml \
+  ./build/example/platform
+```
+
+打开 DDS trace：
+
+```bash
+CYCLONEDDS_URI=file://$PWD/example/cyclonedds-loopback.xml \
+LDP_DDS_TRACE=1 \
+  ./build/example/platform
+```
+
+## Marx Brothers
+
+`marx_brothers/6-Output` 是真实 generated platform，可以用来验证 LDP-DDS 与生成代码的贯通性。
+
+配置：
+
+```bash
+cmake -S marx_brothers/6-Output -B build/marx-brothers-dds \
+  -G Ninja \
+  -DAPR_INCLUDE_DIR="$APR_INCLUDE_DIR" \
+  -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+```
+
+编译：
+
+```bash
+cmake --build build/marx-brothers-dds
+```
+
+运行：
+
+```bash
+ROOT=$PWD
+cd build/marx-brothers-dds/bin
+
+CYCLONEDDS_URI=file://$ROOT/example/cyclonedds-loopback.xml \
+LDP_DDS_TRACE=1 \
+  ./platform
+```
+
+## Lib
+
+只编译 LDP library：
 
 ```bash
 cmake -S lib -B build/lib \
@@ -31,7 +85,7 @@ cmake --build build/lib
 
 ## VSCode 配置
 
-当前推荐让 CMake Tools 直接打开 `example/`，这样既能得到 `compile_commands.json`，也能直接构建 platform 程序：
+推荐让 CMake Tools 直接打开 `example/`，这样可以生成 `compile_commands.json` 并构建 platform 程序：
 
 ```json
 {

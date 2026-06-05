@@ -10,6 +10,8 @@ module LDP_DDS {
   struct Packet {
     unsigned long source_port;
     unsigned long target_port;
+    unsigned short module_id;
+    unsigned short msg_id;
     PacketKind kind;
     sequence<octet> payload;
   };

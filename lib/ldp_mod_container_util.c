@@ -33,7 +33,7 @@
 
 void ldp_kill_platform(ldp_module_context* ctx){
     int msg = LDP_ID_KILL;
-    net_data_w data_w;
+    net_data_w data_w = {0};
 #if USE_UDP_PROTO
     data_w.module_id = 0x01;
     data_w.msg_id = 0x01;
@@ -50,7 +50,7 @@ void ldp_mod_init_notify(ldp_module_context* ctx){
 		ctx->component_ctx->state = PDomain_READY;
 		// send ready to father
 		int msg = LDP_ID_CLIENT_READY;
-		net_data_w data_w;
+		net_data_w data_w = {0};
 #if USE_UDP_PROTO
 		data_w.module_id = 0x01;
 		data_w.msg_id = 0x01;

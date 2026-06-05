@@ -136,7 +136,7 @@ static ldp_status_t write_msg_params(ldp_logger_platform* logger_PF,
 
     ldp_written_IP_header((char*)msg, sizeof(uint32_t) + sizeof(uint16_t), msg_ID);
 
-    net_data_w data_w;
+    net_data_w data_w = {0};
 #if USE_UDP_PROTO
     data_w.module_id = 0x01;
 #endif
