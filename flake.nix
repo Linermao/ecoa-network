@@ -87,27 +87,6 @@
               "-DBUILD_TESTING=OFF"
               "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON"
             ];
-
-            shellHook = ''
-              export DDS_ROOT="$PWD/OpenDDS"
-              export LDP_LIB_ROOT="$PWD/lib"
-              export CMAKE_GENERATOR=Ninja
-              export CMAKE_PREFIX_PATH="${cmakePrefixPath}:''${CMAKE_PREFIX_PATH:-}"
-              export PKG_CONFIG_PATH="${pkgConfigPath}:''${PKG_CONFIG_PATH:-}"
-              export LD_LIBRARY_PATH="${lib.makeLibraryPath libraries}:''${LD_LIBRARY_PATH:-}"
-              export NIX_CFLAGS_COMPILE="''${NIX_CFLAGS_COMPILE:-} -I$APR_INCLUDE_DIR"
-
-              echo "ECOA/OpenDDS dev shell"
-              echo "  OpenDDS source : $DDS_ROOT"
-              echo "  lib source     : $LDP_LIB_ROOT"
-              echo "  generator      : $CMAKE_GENERATOR"
-              echo ""
-              echo "OpenDDS configure example:"
-              echo "  cmake -S OpenDDS -B build/opendds \$OPENDDS_CMAKE_FLAGS"
-              echo ""
-              echo "Platform CMake flags:"
-              echo "  \$PLATFORM_CMAKE_FLAGS"
-            '';
           };
         }
       );

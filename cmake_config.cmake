@@ -9,9 +9,10 @@ set(CMAKE_BUILD_TYPE Debug CACHE STRING "build type")
 set(USER_CMAKE_C_FLAGS "-Wall -std=c99" CACHE STRING "user compilation flag")
 set(USER_CMAKE_CXX_FLAGS "-Wall -std=gnu++11" CACHE STRING "user compilation flag")
 set(CMAKE_USE_AF_UNIX false CACHE BOOL "AF_INET or AF_UNIX socket family")
+set(USE_APEX_API ON CACHE BOOL "Use the APEX APR compatibility shim")
 
 # Select exactly one local transport here: TCP, UDP or DDS.
-set(LDP_LOCAL_TRANSPORT DDS CACHE STRING "Local transport backend" FORCE)
+set(LDP_LOCAL_TRANSPORT TCP CACHE STRING "Local transport backend")
 set_property(CACHE LDP_LOCAL_TRANSPORT PROPERTY STRINGS TCP UDP DDS)
 
 string(TOUPPER "${LDP_LOCAL_TRANSPORT}" LDP_LOCAL_TRANSPORT)

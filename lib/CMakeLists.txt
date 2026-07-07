@@ -48,6 +48,12 @@ endif()
 #####################
 add_library(ecoa ${LDP_LINK_TYPE} ${${PROJECT_NAME}_src} ${${PROJECT_NAME}_platform_src} ${${PROJECT_NAME}_proto_src})
 
+if(USE_APEX_API)
+	target_compile_definitions(ecoa PUBLIC USE_APEX_API=1)
+	target_include_directories(ecoa BEFORE PUBLIC ${CMAKE_CURRENT_LIST_DIR}/apex_apr/include)
+	target_sources(ecoa PRIVATE ${CMAKE_CURRENT_LIST_DIR}/apex_apr/src/apr_time.c)
+endif()
+
 if(${CMAKE_USE_DDS_PROTO})
 	idlc_generate(
 		TARGET ldp_dds_packet_idl
@@ -63,7 +69,7 @@ else()
 	target_compile_definitions(ecoa PUBLIC USE_DDS_PROTO=0 USE_UDP_PROTO=0)
 endif()
 
-target_include_directories(ecoa PRIVATE ${APR_INCLUDE_DIR})
+target_include_directories(ecoa PUBLIC ${APR_INCLUDE_DIR})
 target_include_directories(ecoa PUBLIC .)
 target_include_directories(ecoa PUBLIC eli/)
 target_include_directories(ecoa PUBLIC dds/)
