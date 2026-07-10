@@ -51,7 +51,12 @@ add_library(ecoa ${LDP_LINK_TYPE} ${${PROJECT_NAME}_src} ${${PROJECT_NAME}_platf
 if(USE_APEX_API)
 	target_compile_definitions(ecoa PUBLIC USE_APEX_API=1)
 	target_include_directories(ecoa BEFORE PUBLIC ${CMAKE_CURRENT_LIST_DIR}/apex_apr/include)
-	target_sources(ecoa PRIVATE ${CMAKE_CURRENT_LIST_DIR}/apex_apr/src/apr_time.c)
+	target_sources(ecoa PRIVATE
+		${CMAKE_CURRENT_LIST_DIR}/apex_apr/src/apr_errno.c
+		${CMAKE_CURRENT_LIST_DIR}/apex_apr/src/apr_general.c
+		${CMAKE_CURRENT_LIST_DIR}/apex_apr/src/apr_pools.c
+		${CMAKE_CURRENT_LIST_DIR}/apex_apr/src/apr_strings.c
+		${CMAKE_CURRENT_LIST_DIR}/apex_apr/src/apr_time.c)
 endif()
 
 if(${CMAKE_USE_DDS_PROTO})

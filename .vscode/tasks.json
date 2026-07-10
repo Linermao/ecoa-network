@@ -13,7 +13,7 @@
         "-G",
         "Ninja",
         "-DCMAKE_BUILD_TYPE=Debug",
-        "-DAPR_INCLUDE_DIR=${env:APR_INCLUDE_DIR}",
+        "-DAPR_INCLUDE_DIR=${workspaceFolder}/apr-1.7.6/include",
         "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON"
       ],
       "problemMatcher": [

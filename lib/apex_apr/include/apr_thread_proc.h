@@ -1,0 +1,56 @@
+#ifndef APEX_APR_APR_THREAD_PROC_H
+#define APEX_APR_APR_THREAD_PROC_H
+
+#include_next <apr_thread_proc.h>
+
+#ifdef USE_APEX_API
+
+struct apex_apr_pool_layout;
+
+/*
+ * Thread and process types are bridged here as project-owned aliases first.
+ * The current goal is to secure the public type names while deferring the
+ * eventual APEX-specific handle layouts and static configuration details.
+ */
+typedef struct apex_apr_thread_layout {
+	void *native_thread;
+	struct apex_apr_pool_layout *owner_pool;
+	void *attr_state;
+	void *start_state;
+	void *baton;
+} apex_apr_thread_layout;
+
+typedef struct apex_apr_threadattr_layout {
+	void *stack_state;
+	void *sched_state;
+	void *runtime_policy;
+} apex_apr_threadattr_layout;
+
+typedef struct apex_apr_proc_layout {
+	void *native_proc;
+	void *runtime_descriptor;
+	void *io_state;
+	void *exit_state;
+} apex_apr_proc_layout;
+
+typedef struct apex_apr_procattr_layout {
+	void *launch_config;
+	void *io_config;
+	void *runtime_policy;
+} apex_apr_procattr_layout;
+
+typedef apr_thread_t apex_apr_thread_t;
+typedef apr_threadattr_t apex_apr_threadattr_t;
+typedef apr_proc_t apex_apr_proc_t;
+typedef apr_procattr_t apex_apr_procattr_t;
+typedef apr_exit_why_e apex_apr_exit_why_e;
+
+#define apr_thread_t apex_apr_thread_t
+#define apr_threadattr_t apex_apr_threadattr_t
+#define apr_proc_t apex_apr_proc_t
+#define apr_procattr_t apex_apr_procattr_t
+#define apr_exit_why_e apex_apr_exit_why_e
+
+#endif /* USE_APEX_API */
+
+#endif /* APEX_APR_APR_THREAD_PROC_H */
