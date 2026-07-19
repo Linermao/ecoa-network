@@ -11,9 +11,7 @@
 
 #include "ldp_network.h"
 #include "ldp_structures.h"
-
-#define MAIN_SENDER_PORT 41001
-#define MAIN_RECEIVER_PORT 41002
+#include "route.h"
 
 static apr_pool_t* g_mem_pool = NULL;
 static ldp_Main_ctx* g_main_ctx = NULL;
@@ -136,8 +134,8 @@ int main(int argc, char** argv)
 	ctx.superv_tools->path_to_launcher_t = "launcher.txt";
 	g_main_ctx = &ctx;
 
-	interfaces[0].info_r = (ldp_tcp_info){ MAIN_SENDER_PORT, "127.0.0.1", 1, false };
-	interfaces[1].info_r = (ldp_tcp_info){ MAIN_RECEIVER_PORT, "127.0.0.1", 1, false };
+	interfaces[0].info_r = (ldp_tcp_info){ MAIN_SENDER_PORT, MAIN_SENDER_ADDR, 1, false };
+	interfaces[1].info_r = (ldp_tcp_info){ MAIN_RECEIVER_PORT, MAIN_RECEIVER_ADDR, 1, false };
 
 	signal(SIGINT, stop_children);
 	signal(SIGTERM, stop_children);

@@ -174,7 +174,12 @@ static int send_external_msg(ldp_module_context* ctx,
     ldp_write_ELI_header(ELI_header, msg_buffer, LDP_ELI_UDP_HEADER_SIZE, &written_bytes);
 
     ECOA__uint16 channel_counter=12; /* TODO */
-    ldp_sending_fct_ctx ctx_fct = {&interface->inter.mcast, ctx->logger_PF};
+	ldp_sending_fct_ctx ctx_fct = {
+		&interface->inter.mcast,
+		ctx->logger_PF,
+		ELI_header->msg_ID,
+		ELI_header->platform_ID
+	};
     ldp_ELI_udp_msg_fragment_and_send(&ctx_fct, ldp_ELI_UDP_sending_fct, &msg_buffer[LDP_ELI_UDP_HEADER_SIZE],
                                                      params_size+LDP_ELI_HEADER_SIZE,
                                                      interface->inter.mcast.UDP_current_PF_ID,

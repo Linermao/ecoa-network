@@ -57,8 +57,10 @@ apr_status_t ldp_ELI_UDP_PD_read_msg(ldp_PDomain_ctx* ctx,
 
 //! structure of the context of ldp_ELI_UDP_sending_fct
 typedef struct ldp_sending_fct_ctx{
-	ldp_inter_mcast* interface;  //!< sending interface
-	ldp_logger_platform* logger; //!< logger
+  ldp_inter_mcast* interface;  //!< sending interface
+  ldp_logger_platform* logger; //!< logger
+  uint32_t operation_id;       //!< ELI operation used to select a DDS wire topic
+  uint32_t source_platform_id; //!< sender ELI platform ID
 }ldp_sending_fct_ctx;
 
 //! function type to send ELI message on an UDP multicast socket
