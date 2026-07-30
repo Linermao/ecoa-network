@@ -10,7 +10,6 @@
 
 #include <apr.h>
 #include <apr_thread_cond.h>
-#include <apr_poll.h>
 #include <apr_errno.h>
 
 #include <stdio.h>

@@ -11,7 +11,6 @@
 #define LDP_MULTICAST_H_
 
 #include <apr_network_io.h>
-#include <apr_poll.h>
 #include "ldp_ELI_udp.h"
 
 typedef struct ldp_interface_ctx ldp_interface_ctx;
