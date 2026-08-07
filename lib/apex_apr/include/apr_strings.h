@@ -3,6 +3,8 @@
 
 #include_next <apr_strings.h>
 
+#include <apex_apr_size.h>
+
 #ifdef USE_APEX_API
 
 #ifdef __cplusplus
@@ -21,6 +23,8 @@ extern "C" {
  */
 char *apex_apr_psprintf(apr_pool_t *p, const char *fmt, ...);
 char *apex_apr_cpystrn(char *dst, const char *src, apr_size_t dst_size);
+char *apex_apr_pstrndup(apr_pool_t *p, const char *s, apr_size_t n);
+char *apex_apr_pstrcat(apr_pool_t *p, ...);
 
 #ifdef __cplusplus
 }
@@ -28,6 +32,8 @@ char *apex_apr_cpystrn(char *dst, const char *src, apr_size_t dst_size);
 
 #define apr_psprintf apex_apr_psprintf
 #define apr_cpystrn apex_apr_cpystrn
+#define apr_pstrndup apex_apr_pstrndup
+#define apr_pstrcat apex_apr_pstrcat
 
 #endif /* USE_APEX_API */
 
