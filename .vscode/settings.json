@@ -10,9 +10,23 @@
     "-DUSE_APEX_API=ON",
     "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON"
   ],
-  "C_Cpp.intelliSenseEngine": "disabled",
+  "C_Cpp.intelliSenseEngine": "default",
   "C_Cpp.default.configurationProvider": "ms-vscode.cmake-tools",
   "C_Cpp.default.compileCommands": "${workspaceFolder}/build/example/compile_commands.json",
+  "C_Cpp.default.includePath": [
+    "${workspaceFolder}/lib/apex_apr/include",
+    "${workspaceFolder}/apr-1.7.6/include",
+    "${workspaceFolder}/lib",
+    "${workspaceFolder}/lib/eli",
+    "${workspaceFolder}/lib/tcp",
+    "${workspaceFolder}/lib/udp",
+    "${workspaceFolder}/lib/dds",
+    "${workspaceFolder}"
+  ],
+  "C_Cpp.default.defines": [
+    "USE_APEX_API=1"
+  ],
+  "editor.multiCursorModifier": "alt",
   "clangd.arguments": [
     "--compile-commands-dir=${workspaceFolder}/build/example"
   ]

@@ -26,14 +26,45 @@ APR/APEX 兼容层和 DDS transport 是两条并行工作线。APR 兼容层位�
 
 当前兼容层采用逐步接管模型：在 `lib/apex_apr/include/` 下创建与 APR 同名的头文件，用 `#include_next` 透传真实 APR 头，再用 `USE_APEX_API` 下的宏把单个 APR 函数重定向到 `apex_apr_*` wrapper。
 
-当前示例接管的是 `apr_time.h` 里的 `apr_sleep`：
+当前兼容层已经按 APR 模块拆分接管了以下入口：
 
 - `lib/apex_apr/include/apr_time.h`
 - `lib/apex_apr/src/apr_time.c`
+- `lib/apex_apr/include/apr_general.h`
+- `lib/apex_apr/src/apr_general.c`
+- `lib/apex_apr/include/apr_errno.h`
+- `lib/apex_apr/src/apr_errno.c`
+- `lib/apex_apr/include/apr_pools.h`
+- `lib/apex_apr/src/apr_pools.c`
+- `lib/apex_apr/include/apr_strings.h`
+- `lib/apex_apr/src/apr_strings.c`
 
-现阶段 wrapper 只打印一行 trace，然后委托真实 APR。后续替换新函数时，优先按 APR 模块拆分成一组同名 shim 头和对应实现文件，例如 `apr_thread_mutex.h` / `apr_thread_mutex.c`。
+这些 wrapper 目前分成两种过渡模式：
 
-更详细的维护规则见 `AGENTS.md`。
+- 运行时相关接口：打印一行 trace，然后委托真实 APR。
+- APR 原本就是宏的接口：打印一行 trace，然后在 shim 内做等价兼容计算。
+
+当前已覆盖的接口包括：
+
+- `apr_initialize`
+- `apr_terminate`
+- `apr_strerror`
+- `apr_sleep`
+- `apr_time_now`
+- `apr_time_from_sec`
+- `apr_time_usec`
+- `apr_pool_create`
+- `apr_pool_destroy`
+- `apr_palloc`
+- `apr_pcalloc`
+- `apr_psprintf`
+- `apr_cpystrn`
+
+类型和常量方面，`apr_status_t` 目前仍沿用系统 APR 定义，`APR_SUCCESS` 与 `APR_EGENERAL` 保持 APR 兼容值；后续如果切换到 APEX 状态模型，应当按 `apr_errno` 模块整体替换，而不是零散改 typedef 或单个宏。
+
+后续替换新函数时，优先按 APR 模块拆分成一组同名 shim 头和对应实现文件，例如 `apr_thread_mutex.h` / `apr_thread_mutex.c`。
+
+更详细的维护规则见 `AGENTS.md`；`lib/apex_apr/` 下当前迁移边界和后续状态码替换方案见 `lib/apex_apr/README.md`。
 
 ## Example
 
