@@ -13,7 +13,9 @@
         "-G",
         "Ninja",
         "-DCMAKE_BUILD_TYPE=Debug",
-        "-DAPR_INCLUDE_DIR=${workspaceFolder}/apr-1.7.6/include",
+        "-DAPR_INCLUDE_DIR=${env:APR_INCLUDE_DIR}",
+        "-DLDP_LOCAL_TRANSPORT=TCP",
+        "-DUSE_APEX_API=ON",
         "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON"
       ],
       "problemMatcher": [

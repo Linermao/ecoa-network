@@ -8,6 +8,10 @@ module LDP_DDS {
 
   @final
   struct Packet {
+    unsigned long source_entity;
+    unsigned long target_entity;
+    unsigned long interface_id;
+    unsigned long wire_id;
     unsigned long source_port;
     unsigned long target_port;
     unsigned short module_id;

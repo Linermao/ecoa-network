@@ -12,10 +12,27 @@
 #include "ldp_log_platform.h"
 #include <inttypes.h>
 #include <assert.h>
+#if USE_APEX_PORT
+#include <a653Time.h>
+#else
 #include <unistd.h> //for sleep
 #include <apr_poll.h>
+#endif
+#if !USE_APEX_PORT
 #include "ldp_ELI_msg_management.h"
+#endif
 #include "ldp_structures.h" //for UNUSED macro
+
+static void ldp_network_wait_one_second(void)
+{
+#if USE_APEX_PORT
+	RETURN_CODE_TYPE return_code = NO_ERROR;
+	TIMED_WAIT((SYSTEM_TIME_TYPE)1000000000, &return_code);
+	UNUSED(return_code);
+#else
+	sleep(1);
+#endif
+}
 
 void ldp_written_IP_header(char* buffer, uint32_t param_size, uint32_t op_ID){
 	buffer[0]=0xE;
@@ -167,9 +184,71 @@ static ldp_status_t broadcast_to_client(ldp_logger_platform* logger_PF,
 	return ret;
 }
 
-ldp_status_t main_proc_consume_msg(ldp_Main_ctx* ctx,
+static ldp_status_t main_proc_consume_control_msg(
+							ldp_Main_ctx* ctx,
 							char* buf,
-                            const apr_pollfd_t* fd,
+							ldp_interface_ctx* read_interface_ctx,
+							ldp_interface_ctx* interface_ctx_array);
+
+static ldp_status_t main_proc_consume_fault_payload(
+							ldp_Main_ctx* ctx,
+							char* fault_payload,
+							size_t fault_payload_length)
+{
+	ECOA__asset_id asset_id = 0;
+	ECOA__asset_type asset_type = 0;
+	ECOA__error_type error_type = 0;
+	ECOA__uint32 error_code = 0;
+
+	if (ctx == NULL || fault_payload == NULL ||
+	    fault_payload_length < LDP_FAULT_ERROR_MSG_SIZE - sizeof(uint8_t)) {
+		return LDP_ERROR;
+	}
+
+	ldp_read_IP_fault_error(fault_payload,
+	                        &asset_id,
+	                        &asset_type,
+	                        &error_type,
+	                        &error_code);
+	ldp_fault_error_notification(ctx,
+	                             asset_id,
+	                             asset_type,
+	                             error_type,
+	                             error_code);
+	return LDP_SUCCESS;
+}
+
+ldp_status_t main_proc_consume_complete_msg(
+							ldp_Main_ctx* ctx,
+							char* buf,
+							size_t buf_length,
+							ldp_interface_ctx* read_interface_ctx,
+							ldp_interface_ctx* interface_ctx_array)
+{
+	if (ctx == NULL || buf == NULL || buf_length == 0 ||
+	    read_interface_ctx == NULL || interface_ctx_array == NULL) {
+		return LDP_ERROR;
+	}
+
+	if ((uint8_t)buf[0] == LDP_ID_CLIENT_FAULT_ERROR) {
+		if (buf_length < LDP_FAULT_ERROR_MSG_SIZE) {
+			return LDP_ERROR;
+		}
+
+		return main_proc_consume_fault_payload(
+			ctx,
+			&buf[1],
+			buf_length - sizeof(uint8_t));
+	}
+
+	return main_proc_consume_control_msg(ctx,
+	                                     buf,
+	                                     read_interface_ctx,
+	                                     interface_ctx_array);
+}
+
+static ldp_status_t main_proc_consume_control_msg(ldp_Main_ctx* ctx,
+							char* buf,
 							ldp_interface_ctx* read_interface_ctx,
 							ldp_interface_ctx* interface_ctx_array){
 
@@ -240,31 +319,24 @@ ldp_status_t main_proc_consume_msg(ldp_Main_ctx* ctx,
 				broadcast_to_client(ctx->logger_PF, interface_ctx_array, ctx->PD_number, LDP_ID_START_MOD);
 
 				// initialized ELI starting sequence
+#if !USE_APEX_PORT
 				ldp_ELI_status ret = ldp_ELI_UDP_startup_sequence(ctx);
 
 				if( ret != ELI_STATUS__OK){
 						ldp_log_PF_log_var(ECOA_LOG_ERROR,"ERROR", ctx->logger_PF,
 										"[MAIN] Error during initialization of ELI startup sequence");
 				}
+#else
+				/*
+				 * TODO: APEX local-port mode needs an explicitly configured
+				 * I/O-partition route before ELI startup can be enabled.
+				 */
+#endif
 			}else if(ctx->nb_ready_clients> ctx->PD_number){
 				// restart lost client
 				ldp_log_PF_log_var(ECOA_LOG_INFO_PF, "INFO", ctx->logger_PF,
 									 "************** send start module on port %i", read_interface_ctx->info_r.port );
 				write_msg(ctx->logger_PF, read_interface_ctx, LDP_ID_START_MOD);
-			}
-			break;
-		case LDP_ID_CLIENT_FAULT_ERROR:
-			{
-				ECOA__asset_id    l_asset_id   = 0;
-				ECOA__asset_type  l_asset_type = 0;
-				ECOA__error_type  l_error_type = 0;
-				ECOA__uint32      l_error_code = 0;
-				char l_buffer[128];
-				apr_size_t l_length = LDP_FAULT_ERROR_MSG_SIZE-1;
-				ldp_status_t ret = ldp_IP_read(fd->client_data, l_buffer, &l_length);
-                                UNUSED(ret);
-				ldp_read_IP_fault_error(l_buffer, &l_asset_id, &l_asset_type, &l_error_type, &l_error_code);
-                ldp_fault_error_notification(ctx, l_asset_id, l_asset_type, l_error_type, l_error_code);
 			}
 			break;
 		default:
@@ -274,6 +346,42 @@ ldp_status_t main_proc_consume_msg(ldp_Main_ctx* ctx,
 	}
 	return LDP_SUCCESS;
 }
+
+#if !USE_APEX_PORT
+ldp_status_t main_proc_consume_msg(ldp_Main_ctx* ctx,
+							char* buf,
+							const apr_pollfd_t* fd,
+							ldp_interface_ctx* read_interface_ctx,
+							ldp_interface_ctx* interface_ctx_array)
+{
+	if (ctx == NULL || buf == NULL || fd == NULL ||
+	    read_interface_ctx == NULL || interface_ctx_array == NULL) {
+		return LDP_ERROR;
+	}
+
+	if ((uint8_t)buf[0] == LDP_ID_CLIENT_FAULT_ERROR) {
+		char fault_payload[LDP_FAULT_ERROR_MSG_SIZE - sizeof(uint8_t)];
+		apr_size_t fault_payload_length = sizeof(fault_payload);
+		ldp_status_t status;
+
+		status = ldp_IP_read(fd->client_data,
+		                     fault_payload,
+		                     &fault_payload_length);
+		if (status != LDP_SUCCESS) {
+			return status;
+		}
+
+		return main_proc_consume_fault_payload(ctx,
+		                                       fault_payload,
+		                                       fault_payload_length);
+	}
+
+	return main_proc_consume_control_msg(ctx,
+	                                     buf,
+	                                     read_interface_ctx,
+	                                     interface_ctx_array);
+}
+#endif
 
 ldp_status_t domain_proc_consume_msg(ldp_PDomain_ctx* ctx,
 							char* read_buffer,
@@ -413,7 +521,7 @@ void comp_server_broadcast(ldp_PDomain_ctx* comp_ctx, uint32_t msg_ID){
             l_nb_try--;
             ldp_log_PF_log_var(ECOA_LOG_INFO_PF,"INFO", comp_ctx->logger_PF,
 		    					 "[%s] : waiting for Triggers to start remaining try %d", comp_ctx->name, l_nb_try);
-            sleep(1);
+            ldp_network_wait_one_second();
         }
     }else{
 	    for(int i=0; i<comp_ctx->nb_module;i++){
@@ -471,6 +579,7 @@ void find_dest_mod_by_comp_and_send(ldp_PDomain_ctx* ctx, char* component_name, 
 	}
 }
 
+#if !USE_APEX_PORT
 void ldp_add_pollset(apr_pollset_t *pollset,
 					   ldp_interface_ctx* sock_interface,
 					   apr_socket_t* read_socket,
@@ -483,3 +592,4 @@ void ldp_add_pollset(apr_pollset_t *pollset,
 	apr_pollset_add(pollset, &new_fd);
 // OD END
 }
+#endif

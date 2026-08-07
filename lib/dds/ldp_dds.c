@@ -21,6 +21,13 @@ static ldp_interface_dds* dds_local(ldp_interface_ctx* interface_ctx)
 
 static ldp_dds_runtime* g_runtime = NULL;
 
+static const char* dds_topic_or_fallback(const char* topic_name)
+{
+	return topic_name != NULL && topic_name[0] != '\0'
+	       ? topic_name
+	       : LDP_DDS_FALLBACK_DATA_TOPIC;
+}
+
 static ldp_status_t dds_log_error(const char* operation, dds_return_t ret)
 {
 	if (ret < 0) {
@@ -34,6 +41,97 @@ static ldp_status_t dds_log_error(const char* operation, dds_return_t ret)
 static uint32_t dds_port_or_zero(const ldp_socket_info* info)
 {
 	return info != NULL && info->port > 0 ? (uint32_t)info->port : 0;
+}
+
+const ldp_dds_entity_route* ldp_dds_find_entity_route_by_name(const char* name)
+{
+	if (name == NULL) {
+		return NULL;
+	}
+
+	for (uint32_t i = 0; i < LDP_DDS_ENTITY_ROUTE_COUNT; ++i) {
+		const ldp_dds_entity_route* route = &LDP_DDS_ENTITY_ROUTES[i];
+		if (route->name != NULL && strcmp(route->name, name) == 0) {
+			return route;
+		}
+	}
+	return NULL;
+}
+
+const ldp_dds_control_route* ldp_dds_find_control_route_by_ports(uint32_t source_port,
+                                                                 uint32_t target_port)
+{
+	for (uint32_t i = 0; i < LDP_DDS_CONTROL_ROUTE_COUNT; ++i) {
+		const ldp_dds_control_route* route = &LDP_DDS_CONTROL_ROUTES[i];
+		if ((uint32_t)route->source_legacy_port == source_port &&
+		    (uint32_t)route->target_legacy_port == target_port) {
+			return route;
+		}
+	}
+	return NULL;
+}
+
+const ldp_dds_control_route* ldp_dds_find_control_route_by_interface(uint32_t interface_id)
+{
+	if (interface_id == 0) {
+		return NULL;
+	}
+	for (uint32_t i = 0; i < LDP_DDS_CONTROL_ROUTE_COUNT; ++i) {
+		if (LDP_DDS_CONTROL_ROUTES[i].interface_id == interface_id) {
+			return &LDP_DDS_CONTROL_ROUTES[i];
+		}
+	}
+	return NULL;
+}
+
+const ldp_dds_wire_route* ldp_dds_find_wire_route_by_target_port(uint32_t target_port)
+{
+	for (uint32_t i = 0; i < LDP_DDS_WIRE_ROUTE_COUNT; ++i) {
+		if ((uint32_t)LDP_DDS_WIRE_ROUTES[i].target_legacy_port == target_port) {
+			return &LDP_DDS_WIRE_ROUTES[i];
+		}
+	}
+	return NULL;
+}
+
+const ldp_dds_wire_route* ldp_dds_find_wire_route_by_interface(uint32_t interface_id)
+{
+	if (interface_id == 0) {
+		return NULL;
+	}
+	for (uint32_t i = 0; i < LDP_DDS_WIRE_ROUTE_COUNT; ++i) {
+		if (LDP_DDS_WIRE_ROUTES[i].interface_id == interface_id) {
+			return &LDP_DDS_WIRE_ROUTES[i];
+		}
+	}
+	return NULL;
+}
+
+const ldp_dds_wire_route* ldp_dds_find_wire_route_by_operation(uint32_t operation_id,
+                                                               uint32_t source_platform_id)
+{
+	if (operation_id == 0 || source_platform_id == 0) {
+		return NULL;
+	}
+
+	for (uint32_t i = 0; i < LDP_DDS_OPERATION_ROUTE_COUNT; ++i) {
+		const ldp_dds_operation_route* route = &LDP_DDS_OPERATION_ROUTES[i];
+		uint32_t interface_id = 0;
+
+		if (route->operation_id != operation_id) {
+			continue;
+		}
+		if (route->source_platform_id == source_platform_id) {
+			interface_id = route->forward_interface_id;
+		} else if (route->target_platform_id == source_platform_id) {
+			interface_id = route->reverse_interface_id;
+		}
+
+		if (interface_id != 0) {
+			return ldp_dds_find_wire_route_by_interface(interface_id);
+		}
+	}
+	return NULL;
 }
 
 bool ldp_dds_trace_enabled(void)
@@ -112,12 +210,17 @@ void ldp_dds_trace_packet(const char* stage,
 	}
 
 	fprintf(stderr,
-	        "[DDS %s] owner=%s iface=%d source=%" PRIu32 " target=%" PRIu32
+	        "[DDS %s] owner=%s iface=%d route_iface=%" PRIu32 " wire=%" PRIu32
+	        " entity=%" PRIu32 "->%" PRIu32 " legacy=%" PRIu32 "->%" PRIu32
 	        " module=%" PRIu16 " msg=%" PRIu16 " kind=%s op=%" PRIu32
 	        " size=%" PRIu32 "\n",
 	        stage != NULL ? stage : "?",
 	        owner != NULL ? owner : "?",
 	        interface_index,
+	        packet->interface_id,
+	        packet->wire_id,
+	        packet->source_entity,
+	        packet->target_entity,
 	        packet->source_port,
 	        packet->target_port,
 	        packet->module_id,
@@ -199,13 +302,17 @@ static LDP_DDS_PacketKind dds_packet_kind_from_payload(const char* payload,
 	return LDP_DDS_LDP_DDS_PACKET_DATA;
 }
 
-static bool dds_target_port_filter(const void* sample, void* arg)
+bool ldp_dds_packet_targets_runtime(const ldp_dds_runtime* runtime,
+                                    const LDP_DDS_Packet* packet)
 {
-	const LDP_DDS_Packet* packet = (const LDP_DDS_Packet*)sample;
-	const ldp_dds_runtime* runtime = (const ldp_dds_runtime*)arg;
-
 	if (packet == NULL || runtime == NULL) {
 		return false;
+	}
+
+	for (size_t i = 0; i < runtime->target_entity_count; ++i) {
+		if (runtime->target_entities[i] == packet->target_entity) {
+			return true;
+		}
 	}
 
 	for (size_t i = 0; i < runtime->target_port_count; ++i) {
@@ -214,7 +321,33 @@ static bool dds_target_port_filter(const void* sample, void* arg)
 		}
 	}
 
+	/* ELI platform-management packets are broadcast when no routed target exists. */
+	if (packet->target_entity == 0 && packet->target_port == 0) {
+		return true;
+	}
+
 	return false;
+}
+
+ldp_status_t ldp_dds_runtime_add_target_entity(ldp_dds_runtime* runtime, uint32_t entity_id)
+{
+	if (runtime == NULL || entity_id == 0) {
+		return LDP_ERROR;
+	}
+
+	for (size_t i = 0; i < runtime->target_entity_count; ++i) {
+		if (runtime->target_entities[i] == entity_id) {
+			return LDP_SUCCESS;
+		}
+	}
+
+	if (runtime->target_entity_count >= LDP_DDS_MAX_TARGET_ENTITIES) {
+		fprintf(stderr, "[DDS] too many target entities registered\n");
+		return LDP_ERROR;
+	}
+
+	runtime->target_entities[runtime->target_entity_count++] = entity_id;
+	return LDP_SUCCESS;
 }
 
 ldp_status_t ldp_dds_runtime_add_target_port(ldp_dds_runtime* runtime, uint32_t port)
@@ -238,52 +371,109 @@ ldp_status_t ldp_dds_runtime_add_target_port(ldp_dds_runtime* runtime, uint32_t 
 	return LDP_SUCCESS;
 }
 
+static ldp_dds_topic_endpoint* dds_find_endpoint(ldp_dds_runtime* runtime, const char* topic_name)
+{
+	if (runtime == NULL || topic_name == NULL) {
+		return NULL;
+	}
+
+	for (size_t i = 0; i < runtime->endpoint_count; ++i) {
+		if (strcmp(runtime->endpoints[i].name, topic_name) == 0) {
+			return &runtime->endpoints[i];
+		}
+	}
+
+	return NULL;
+}
+
+static ldp_status_t dds_add_topic_endpoint(ldp_dds_runtime* runtime,
+                                           const char* topic_name,
+                                           dds_qos_t* qos)
+{
+	ldp_dds_topic_endpoint* endpoint = NULL;
+	dds_return_t ret;
+
+	topic_name = dds_topic_or_fallback(topic_name);
+	if (runtime == NULL || qos == NULL) {
+		return LDP_ERROR;
+	}
+
+	if (dds_find_endpoint(runtime, topic_name) != NULL) {
+		return LDP_SUCCESS;
+	}
+
+	if (runtime->endpoint_count >= LDP_DDS_MAX_TOPIC_ENDPOINTS) {
+		fprintf(stderr, "[DDS] too many topic endpoints registered\n");
+		return LDP_ERROR;
+	}
+
+	endpoint = &runtime->endpoints[runtime->endpoint_count];
+	memset(endpoint, 0, sizeof(*endpoint));
+	endpoint->name = topic_name;
+	endpoint->topic = dds_create_topic(runtime->participant,
+	                                   &LDP_DDS_Packet_desc,
+	                                   topic_name,
+	                                   NULL,
+	                                   NULL);
+	if (endpoint->topic < 0) {
+		dds_log_error("dds_create_topic", endpoint->topic);
+		return LDP_ERROR;
+	}
+
+	endpoint->writer = dds_create_writer(runtime->participant,
+	                                     endpoint->topic,
+	                                     qos,
+	                                     NULL);
+	if (endpoint->writer < 0) {
+		dds_log_error("dds_create_writer", endpoint->writer);
+		return LDP_ERROR;
+	}
+
+	endpoint->reader = dds_create_reader(runtime->participant,
+	                                     endpoint->topic,
+	                                     qos,
+	                                     NULL);
+	if (endpoint->reader < 0) {
+		dds_log_error("dds_create_reader", endpoint->reader);
+		return LDP_ERROR;
+	}
+
+	runtime->endpoint_count++;
+	return LDP_SUCCESS;
+}
+
+static ldp_status_t dds_add_generated_route_topics(ldp_dds_runtime* runtime, dds_qos_t* qos)
+{
+	if (dds_add_topic_endpoint(runtime, LDP_DDS_FALLBACK_DATA_TOPIC, qos) != LDP_SUCCESS) {
+		return LDP_ERROR;
+	}
+
+	for (uint32_t i = 0; i < LDP_DDS_CONTROL_ROUTE_COUNT; ++i) {
+		if (dds_add_topic_endpoint(runtime, LDP_DDS_CONTROL_ROUTES[i].topic_name, qos) != LDP_SUCCESS) {
+			return LDP_ERROR;
+		}
+	}
+
+	for (uint32_t i = 0; i < LDP_DDS_WIRE_ROUTE_COUNT; ++i) {
+		if (dds_add_topic_endpoint(runtime, LDP_DDS_WIRE_ROUTES[i].topic_name, qos) != LDP_SUCCESS) {
+			return LDP_ERROR;
+		}
+	}
+
+	return LDP_SUCCESS;
+}
+
 static ldp_status_t dds_create_runtime(ldp_dds_runtime** runtime_out)
 {
 	ldp_dds_runtime* runtime = calloc(1, sizeof(*runtime));
 	dds_qos_t* qos = NULL;
-	dds_return_t ret;
 	if (runtime == NULL) {
 		return LDP_ERROR;
 	}
 
-	runtime->participant = dds_create_participant(DDS_DOMAIN_DEFAULT, NULL, NULL);
+	runtime->participant = dds_create_participant(LDP_DDS_DOMAIN_ID, NULL, NULL);
 	if (runtime->participant < 0) {
 		dds_log_error("dds_create_participant", runtime->participant);
-		free(runtime);
-		return LDP_ERROR;
-	}
-
-	runtime->data_write_topic = dds_create_topic(runtime->participant,
-	                                             &LDP_DDS_Packet_desc,
-	                                             LDP_DDS_DATA_TOPIC,
-	                                             NULL,
-	                                             NULL);
-	if (runtime->data_write_topic < 0) {
-		dds_log_error("dds_create_topic(write)", runtime->data_write_topic);
-		dds_delete(runtime->participant);
-		free(runtime);
-		return LDP_ERROR;
-	}
-
-	runtime->data_read_topic = dds_create_topic(runtime->participant,
-	                                            &LDP_DDS_Packet_desc,
-	                                            LDP_DDS_DATA_TOPIC,
-	                                            NULL,
-	                                            NULL);
-	if (runtime->data_read_topic < 0) {
-		dds_log_error("dds_create_topic(read)", runtime->data_read_topic);
-		dds_delete(runtime->participant);
-		free(runtime);
-		return LDP_ERROR;
-	}
-
-	ret = dds_set_topic_filter_and_arg(runtime->data_read_topic,
-	                                   dds_target_port_filter,
-	                                   runtime);
-	if (ret < 0) {
-		dds_log_error("dds_set_topic_filter_and_arg", ret);
-		dds_delete(runtime->participant);
 		free(runtime);
 		return LDP_ERROR;
 	}
@@ -298,30 +488,14 @@ static ldp_status_t dds_create_runtime(ldp_dds_runtime** runtime_out)
 	dds_qset_durability(qos, DDS_DURABILITY_TRANSIENT_LOCAL);
 	dds_qset_history(qos, DDS_HISTORY_KEEP_LAST, 32);
 
-	runtime->data_writer = dds_create_writer(runtime->participant,
-	                                         runtime->data_write_topic,
-	                                         qos,
-	                                         NULL);
-	if (runtime->data_writer < 0) {
-		dds_log_error("dds_create_writer", runtime->data_writer);
+	if (dds_add_generated_route_topics(runtime, qos) != LDP_SUCCESS) {
 		dds_delete_qos(qos);
 		dds_delete(runtime->participant);
 		free(runtime);
 		return LDP_ERROR;
 	}
 
-	runtime->data_reader = dds_create_reader(runtime->participant,
-	                                         runtime->data_read_topic,
-	                                         qos,
-	                                         NULL);
 	dds_delete_qos(qos);
-	if (runtime->data_reader < 0) {
-		dds_log_error("dds_create_reader", runtime->data_reader);
-		dds_delete(runtime->participant);
-		free(runtime);
-		return LDP_ERROR;
-	}
-
 	*runtime_out = runtime;
 	return LDP_SUCCESS;
 }
@@ -368,6 +542,12 @@ static ldp_status_t dds_publish_bytes(ldp_interface_dds* interface,
                                       net_data_w_dds* data_w)
 {
 	LDP_DDS_Packet packet;
+	const ldp_dds_control_route* control_route = NULL;
+	const ldp_dds_wire_route* wire_route = NULL;
+	ldp_dds_topic_endpoint* endpoint = NULL;
+	uint32_t source_port = 0;
+	uint32_t target_port = 0;
+	const char* topic_name = LDP_DDS_FALLBACK_DATA_TOPIC;
 	dds_return_t ret;
 
 	if (interface == NULL || interface->backend == NULL || !interface->initialized) {
@@ -379,14 +559,34 @@ static ldp_status_t dds_publish_bytes(ldp_interface_dds* interface,
 	}
 
 	memset(&packet, 0, sizeof(packet));
-	packet.source_port = dds_port_or_zero(interface->info_r);
-	packet.target_port = dds_port_or_zero(interface->info_w != NULL ? interface->info_w : interface->info_r);
+	source_port = dds_port_or_zero(interface->info_r);
+	target_port = dds_port_or_zero(interface->info_w != NULL ? interface->info_w : interface->info_r);
+	packet.source_port = source_port;
+	packet.target_port = target_port;
 	if (data_w != NULL) {
 		data_w->msg_id++;
 		packet.module_id = data_w->module_id;
 		packet.msg_id = data_w->msg_id;
 	}
 	packet.kind = dds_packet_kind_from_payload(payload, payload_size);
+
+	control_route = ldp_dds_find_control_route_by_ports(source_port, target_port);
+	if (control_route != NULL) {
+		packet.source_entity = control_route->source_entity_id;
+		packet.target_entity = control_route->target_entity_id;
+		packet.interface_id = control_route->interface_id;
+		topic_name = control_route->topic_name;
+	} else {
+		wire_route = ldp_dds_find_wire_route_by_target_port(target_port);
+		if (wire_route != NULL) {
+			packet.source_entity = wire_route->source_pd_id;
+			packet.target_entity = wire_route->target_pd_id;
+			packet.interface_id = wire_route->interface_id;
+			packet.wire_id = wire_route->wire_id;
+			topic_name = wire_route->topic_name;
+		}
+	}
+
 	packet.payload._maximum = (uint32_t)payload_size;
 	packet.payload._length = (uint32_t)payload_size;
 	packet.payload._buffer = (uint8_t*)payload;
@@ -394,7 +594,18 @@ static ldp_status_t dds_publish_bytes(ldp_interface_dds* interface,
 
 	ldp_dds_trace_packet("write", interface->role == LDP_DDS_ROLE_MAIN ? "main" : "component", -1, &packet);
 
-	ret = dds_write(interface->backend->runtime->data_writer, &packet);
+	endpoint = dds_find_endpoint(interface->backend->runtime, dds_topic_or_fallback(topic_name));
+	if (endpoint == NULL) {
+		endpoint = dds_find_endpoint(interface->backend->runtime, LDP_DDS_FALLBACK_DATA_TOPIC);
+	}
+	if (endpoint == NULL && interface->backend->runtime->endpoint_count > 0) {
+		endpoint = &interface->backend->runtime->endpoints[0];
+	}
+	if (endpoint == NULL) {
+		return LDP_ERROR;
+	}
+
+	ret = dds_write(endpoint->writer, &packet);
 	if (ret < 0) {
 		return dds_log_error("dds_write", ret);
 	}
@@ -404,9 +615,14 @@ static ldp_status_t dds_publish_bytes(ldp_interface_dds* interface,
 
 static ldp_status_t dds_publish_mcast_datagram(ldp_inter_mcast* interface,
                                                char* payload,
-                                               uint64_t payload_size)
+                                               uint64_t payload_size,
+                                               uint32_t operation_id,
+                                               uint32_t source_platform_id)
 {
 	LDP_DDS_Packet packet;
+	const ldp_dds_wire_route* wire_route = NULL;
+	ldp_dds_topic_endpoint* endpoint = NULL;
+	const char* topic_name = LDP_DDS_FALLBACK_DATA_TOPIC;
 	dds_return_t ret;
 
 	if (interface == NULL || payload == NULL || payload_size > UINT32_MAX) {
@@ -421,6 +637,14 @@ static ldp_status_t dds_publish_mcast_datagram(ldp_inter_mcast* interface,
 	packet.source_port = interface->UDP_current_PF_ID;
 	packet.target_port = dds_port_or_zero(interface->ip_info);
 	packet.kind = LDP_DDS_LDP_DDS_PACKET_DATA;
+	wire_route = ldp_dds_find_wire_route_by_operation(operation_id, source_platform_id);
+	if (wire_route != NULL) {
+		packet.source_entity = wire_route->source_pd_id;
+		packet.target_entity = wire_route->target_pd_id;
+		packet.interface_id = wire_route->interface_id;
+		packet.wire_id = wire_route->wire_id;
+		topic_name = wire_route->topic_name;
+	}
 	packet.payload._maximum = (uint32_t)payload_size;
 	packet.payload._length = (uint32_t)payload_size;
 	packet.payload._buffer = (uint8_t*)payload;
@@ -428,7 +652,15 @@ static ldp_status_t dds_publish_mcast_datagram(ldp_inter_mcast* interface,
 
 	ldp_dds_trace_packet("write.mcast", "eli", -1, &packet);
 
-	ret = dds_write(g_runtime->data_writer, &packet);
+	endpoint = dds_find_endpoint(g_runtime, dds_topic_or_fallback(topic_name));
+	if (endpoint == NULL && g_runtime->endpoint_count > 0) {
+		endpoint = &g_runtime->endpoints[0];
+	}
+	if (endpoint == NULL) {
+		return LDP_ERROR;
+	}
+
+	ret = dds_write(endpoint->writer, &packet);
 	if (ret < 0) {
 		return dds_log_error("dds_write(mcast)", ret);
 	}
@@ -489,7 +721,20 @@ ldp_status_t ldp_create_interface_dds(ldp_interface_dds* interface, apr_pool_t* 
 
 ldp_status_t ldp_dds_mcast_send(ldp_inter_mcast* interface, char* msg, uint64_t msg_size)
 {
-	return dds_publish_mcast_datagram(interface, msg, msg_size);
+	return dds_publish_mcast_datagram(interface, msg, msg_size, 0, 0);
+}
+
+ldp_status_t ldp_dds_mcast_send_routed(ldp_inter_mcast* interface,
+                                       char* msg,
+                                       uint64_t msg_size,
+                                       uint32_t operation_id,
+                                       uint32_t source_platform_id)
+{
+	return dds_publish_mcast_datagram(interface,
+	                                  msg,
+	                                  msg_size,
+	                                  operation_id,
+	                                  source_platform_id);
 }
 
 ldp_dds_runtime* ldp_dds_get_runtime(ldp_interface_dds* interface)

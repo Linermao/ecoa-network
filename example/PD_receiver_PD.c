@@ -6,12 +6,7 @@
 
 #include "ldp_network.h"
 #include "ldp_structures.h"
-
-#define RECEIVER_DATA_PORT 30002
-#define MAIN_RECEIVER_PORT 41002
-#define SENDER_CONTROL_PORT 46001
-#define OP_DATA 42
-#define OP_ACK 43
+#include "route.h"
 
 static ldp_status_t send_ldp_message(ldp_interface_ctx* interface_ctx,
                                      uint32_t op_id,
@@ -75,13 +70,13 @@ int main(void)
 	memset(msg_buffer, 0, sizeof(msg_buffer));
 
 	interfaces[0].type = LDP_LOCAL_IP;
-	interfaces[0].info_r = (ldp_tcp_info){ RECEIVER_DATA_PORT, "127.0.0.1", 1, true };
+	interfaces[0].info_r = (ldp_tcp_info){ RECEIVER_DATA_PORT, RECEIVER_DATA_ADDR, 1, true };
 
 	interfaces[1].type = LDP_LOCAL_IP;
-	interfaces[1].info_r = (ldp_tcp_info){ MAIN_RECEIVER_PORT, "127.0.0.1", 1, true };
+	interfaces[1].info_r = (ldp_tcp_info){ MAIN_RECEIVER_PORT, MAIN_RECEIVER_ADDR, 1, true };
 
 	interfaces[2].type = LDP_LOCAL_IP;
-	interfaces[2].info_r = (ldp_tcp_info){ SENDER_CONTROL_PORT, "127.0.0.1", 1, true };
+	interfaces[2].info_r = (ldp_tcp_info){ SENDER_CONTROL_PORT, SENDER_CONTROL_ADDR, 1, true };
 
 	ctx.name = "PD_receiver_PD";
 	ctx.mem_pool = mem_pool;

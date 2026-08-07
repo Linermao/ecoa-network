@@ -15,6 +15,7 @@
 #include <apr_pools.h>
 
 #include "ECOA.h"
+#include "ldp_dds_route.h"
 #include "ldp_status_error.h"
 
 #if defined(__cplusplus)
@@ -56,6 +57,13 @@ typedef struct net_data_w_dds {
 ldp_status_t ldp_create_interface_dds(ldp_interface_dds* interface, apr_pool_t* mp);
 void ldp_destroy_interface_dds(ldp_interface_dds* interface);
 ldp_status_t ldp_dds_mcast_send(ldp_inter_mcast* interface, char* msg, uint64_t msg_size);
+ldp_status_t ldp_dds_mcast_send_routed(ldp_inter_mcast* interface,
+                                       char* msg,
+                                       uint64_t msg_size,
+                                       uint32_t operation_id,
+                                       uint32_t source_platform_id);
+const ldp_dds_wire_route* ldp_dds_find_wire_route_by_operation(uint32_t operation_id,
+                                                               uint32_t source_platform_id);
 
 /**
  * Entry point for a DDS reader callback delivering a full LDP payload to a PD.

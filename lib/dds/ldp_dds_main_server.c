@@ -47,6 +47,32 @@ static ldp_interface_ctx* find_main_interface_by_target_port(ldp_Main_ctx* ctx,
 	return NULL;
 }
 
+static ldp_interface_ctx* find_main_interface_by_packet(ldp_Main_ctx* ctx,
+                                                        ldp_interface_ctx* interface_ctx_array,
+                                                        const LDP_DDS_Packet* packet,
+                                                        int* interface_index_out)
+{
+	const ldp_dds_control_route* control_route = NULL;
+	uint32_t target_port = 0;
+
+	if (packet == NULL) {
+		return NULL;
+	}
+
+	control_route = ldp_dds_find_control_route_by_interface(packet->interface_id);
+	if (control_route != NULL &&
+	    control_route->target_entity_id == LDP_DDS_PD_MAIN) {
+		target_port = (uint32_t)control_route->target_legacy_port;
+	} else {
+		target_port = packet->target_port;
+	}
+
+	return find_main_interface_by_target_port(ctx,
+	                                          interface_ctx_array,
+	                                          target_port,
+	                                          interface_index_out);
+}
+
 static ldp_platform_info* find_connected_platform(ldp_Main_ctx* ctx, uint32_t platform_ID)
 {
 	if (ctx == NULL) {
@@ -259,10 +285,10 @@ static ldp_status_t deliver_main_packet(ldp_Main_ctx* ctx,
 {
 	ldp_status_t status = LDP_SUCCESS;
 	int target_index = -1;
-	ldp_interface_ctx* target_interface = find_main_interface_by_target_port(ctx,
-	                                                                         interface_ctx_array,
-	                                                                         packet->target_port,
-	                                                                         &target_index);
+	ldp_interface_ctx* target_interface = find_main_interface_by_packet(ctx,
+	                                                                    interface_ctx_array,
+	                                                                    packet,
+	                                                                    &target_index);
 	char* delivery_buffer = NULL;
 
 	ldp_dds_trace_packet("take.main", "main", target_index, packet);
@@ -310,31 +336,41 @@ static ldp_status_t run_dds_main_server(ldp_Main_ctx* ctx,
                                         ldp_dds_runtime* runtime)
 {
 	while (true) {
-		void* samples[8] = { NULL };
-		dds_sample_info_t infos[8];
-		memset(infos, 0, sizeof(infos));
+		bool took_sample = false;
 
-		dds_return_t ret = dds_take(runtime->data_reader, samples, infos, 8, 8);
-		if (ret < 0) {
-			fprintf(stderr, "[DDS] main dds_take failed: %s\n", dds_strretcode(-ret));
-			return LDP_ERROR;
-		}
+		for (size_t endpoint_i = 0; endpoint_i < runtime->endpoint_count; ++endpoint_i) {
+			ldp_dds_topic_endpoint* endpoint = &runtime->endpoints[endpoint_i];
+			void* samples[8] = { NULL };
+			dds_sample_info_t infos[8];
+			memset(infos, 0, sizeof(infos));
 
-		for (int i = 0; i < ret; ++i) {
-			if (infos[i].valid_data) {
-				ldp_status_t status = deliver_main_packet(ctx,
-				                                          interface_ctx_array,
-				                                          (LDP_DDS_Packet*)samples[i]);
-				if (status == LDP_ERROR) {
-					dds_return_loan(runtime->data_reader, samples, ret);
-					return LDP_ERROR;
+			dds_return_t ret = dds_take(endpoint->reader, samples, infos, 8, 8);
+			if (ret < 0) {
+				fprintf(stderr, "[DDS] main dds_take failed: %s\n", dds_strretcode(-ret));
+				return LDP_ERROR;
+			}
+
+			for (int i = 0; i < ret; ++i) {
+				if (infos[i].valid_data &&
+				    ldp_dds_packet_targets_runtime(runtime,
+				                                   (LDP_DDS_Packet*)samples[i])) {
+					ldp_status_t status = deliver_main_packet(ctx,
+					                                          interface_ctx_array,
+					                                          (LDP_DDS_Packet*)samples[i]);
+					if (status == LDP_ERROR) {
+						dds_return_loan(endpoint->reader, samples, ret);
+						return LDP_ERROR;
+					}
 				}
+			}
+
+			if (ret > 0) {
+				took_sample = true;
+				dds_return_loan(endpoint->reader, samples, ret);
 			}
 		}
 
-		if (ret > 0) {
-			dds_return_loan(runtime->data_reader, samples, ret);
-		} else {
+		if (!took_sample) {
 			dds_sleepfor(DDS_MSECS(10));
 		}
 	}
@@ -407,11 +443,21 @@ void ldp_start_father_server(ldp_Main_ctx* ctx,
 		return;
 	}
 
+	if (ldp_dds_runtime_add_target_entity(runtime, LDP_DDS_PD_MAIN) != LDP_SUCCESS) {
+		ldp_log_PF_log(ECOA_LOG_ERROR_PF,
+		               "ERROR",
+		               ctx->logger_PF,
+		               "[DDS] cannot register main platform entity");
+		destroy_main_interfaces(interface_ctx_array, initialized_count);
+		return;
+	}
+
 	for (uint32_t i = 0; i < ctx->mcast_reader_interface_num; ++i) {
 		ldp_interface_ctx* interface_ctx = &ctx->mcast_reader_interface[i];
 		interface_ctx->type = LDP_ELI_MCAST;
 		interface_ctx->inter.mcast.ip_info = &interface_ctx->info_r;
-		if (ldp_dds_runtime_add_target_port(runtime, (uint32_t)interface_ctx->info_r.port) != LDP_SUCCESS) {
+		if (interface_ctx->info_r.port > 0 &&
+		    ldp_dds_runtime_add_target_port(runtime, (uint32_t)interface_ctx->info_r.port) != LDP_SUCCESS) {
 			ldp_log_PF_log_var(ECOA_LOG_ERROR_PF,
 			                   "ERROR",
 			                   ctx->logger_PF,

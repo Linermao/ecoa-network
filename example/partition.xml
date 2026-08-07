@@ -1,0 +1,34 @@
+<Partition Name="MAIN">
+    <QueuingPort
+        Name="MAIN_TX_PD1"
+        Direction="SOURCE"
+        MaxMessageSize="65536"
+        MaxNbMessage="16"/>
+    <QueuingPort
+        Name="MAIN_RX_PD1"
+        Direction="DESTINATION"
+        MaxMessageSize="65536"
+        MaxNbMessage="16"/>
+</Partition>
+<Partition Name="PD1">
+    <QueuingPort
+        Name="PD1_RX_MAIN"
+        Direction="DESTINATION"
+        MaxMessageSize="65536"
+        MaxNbMessage="16"/>
+    <QueuingPort
+        Name="PD1_TX_MAIN"
+        Direction="SOURCE"
+        MaxMessageSize="65536"
+        MaxNbMessage="16"/>
+</Partition>
+
+<Channel Name="MAIN_TO_PD1">
+    <Source Partition="MAIN" Port="MAIN_TX_PD1"/>
+    <Destination Partition="PD1" Port="PD1_RX_MAIN"/>
+</Channel>
+
+<Channel Name="PD1_TO_MAIN">
+    <Source Partition="PD1" Port="PD1_TX_MAIN"/>
+    <Destination Partition="MAIN" Port="MAIN_RX_PD1"/>
+</Channel>

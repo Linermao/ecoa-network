@@ -360,6 +360,13 @@ apr_status_t ldp_ELI_UDP_PD_read_msg(ldp_PDomain_ctx* ctx,
       ELI_header.domain, interface_ctx->info_r.addr, interface_ctx->info_r.port);
   }
 
+  /* Release the channel back to the free pool so it can be reused for
+   * subsequent messages on the same PF link. Without this reset,
+   * channel->is_used stays true after the first message and every
+   * subsequent call to ldp_ELI_udp_msg_defragment returns
+   * ELI_STATUS__NO_CHANNEL_AVAILABLE. */
+  channel->is_used = false;
+
   return ELI_STATUS__OK;
 }
 
@@ -367,8 +374,18 @@ apr_status_t ldp_ELI_UDP_PD_read_msg(ldp_PDomain_ctx* ctx,
 void ldp_ELI_UDP_sending_fct(void* sock_context, const unsigned char* payload, uint32_t payload_size){
   ldp_sending_fct_ctx* ctx = (ldp_sending_fct_ctx*) sock_context;
   uint64_t bytes_num = payload_size;
+#if USE_DDS_PROTO
+  if (ldp_dds_mcast_send_routed(ctx->interface,
+                                (char*)payload,
+                                bytes_num,
+                                ctx->operation_id,
+                                ctx->source_platform_id) != LDP_SUCCESS) {
+    bytes_num = 0;
+  }
+#else
   ldp_mcast_send(ctx->interface,
                       (char*) payload,
                       &bytes_num,
                       ctx->logger);
+#endif
 }

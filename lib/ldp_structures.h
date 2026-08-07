@@ -21,7 +21,6 @@ extern "C" {
 #include <apr_thread_cond.h>
 #include <apr_thread_proc.h>
 #include <apr_thread_mutex.h>
-#include <apr_poll.h>
 #include "ldp_VD.h"
 #include "ldp_log.h"
 #include "ldp_log_platform.h"
@@ -85,6 +84,8 @@ typedef struct ldp_interface_ctx ldp_interface_ctx; //! define in ldp_network.h
 typedef struct net_data_w_dds net_data_w; //!< define in ldp_dds.h
 #elif USE_UDP_PROTO
 typedef struct net_data_w_udp net_data_w; //!< define in ldp_udp.h
+#elif USE_APEX_PORT
+typedef struct net_data_w_apex_port net_data_w; //!< define in ldp_apex_port.h
 #else
 typedef struct net_data_w net_data_w; //!< define in ldp_udp.h or in ldp_tcp.h
 #endif

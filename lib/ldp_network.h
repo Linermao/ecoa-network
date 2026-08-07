@@ -20,11 +20,13 @@ extern "C" {
 #define _LDP_NETWORK_H
 
 #include <stdbool.h>
+#include <stddef.h>
 
+#if !USE_APEX_PORT
 #include <apr_poll.h>
+#endif
 #include "ldp_log_platform.h"
 #include "ldp_status_error.h"
-#include "apr_thread_mutex.h"
 #include "ldp_launcher.h"
 #include "ldp_fifo_manager.h"
 #include "ldp_structures.h"
@@ -33,6 +35,8 @@ extern "C" {
 #include "ldp_dds.h"
 #elif USE_UDP_PROTO
 #include "ldp_udp.h"
+#elif USE_APEX_PORT
+#include "ldp_apex_port.h"
 #else
 #include "ldp_tcp.h"
 #endif
@@ -104,6 +108,8 @@ typedef ldp_socket_info ldp_tcp_info;
 typedef struct ldp_interface_dds ldp_inter_local; //!< dds interface
 #elif USE_UDP_PROTO
 typedef struct ldp_interface_udp ldp_inter_local; //!< udp interface
+#elif USE_APEX_PORT
+typedef struct ldp_interface_apex_port ldp_inter_local; //!< APEX queuing-port interface
 #else
 typedef struct ldp_interface_tcp ldp_inter_local; //!< tcp interface
 #endif
@@ -111,8 +117,8 @@ typedef struct ldp_interface_tcp ldp_inter_local; //!< tcp interface
 //! network interface with other processes or platforms
 typedef struct ldp_interface_ctx{
 	ldp_interface_type type; //!< type of interface : local or multicast socket
-	ldp_socket_info info_r; //!< IP information of a read socket: address, port, ...
-	ldp_socket_info info_s; //!< IP information of a send socket: address, port, ... . Used by ELI only TODO: remove it -not used!!!
+	ldp_socket_info info_r; //!< Read endpoint; addr is the APEX DESTINATION port name in the APEX backend.
+	ldp_socket_info info_s; //!< Write endpoint; addr is the APEX SOURCE port name in the APEX backend.
 	union{
 		ldp_inter_local local; //!< local platform socket : TCP or UDP (depends of compilation option).
 		ldp_inter_mcast mcast; //!< external multicast socket with an other platform
@@ -135,6 +141,8 @@ typedef struct launching_thread_params_t {
 typedef struct net_data_w_dds net_data_w; //!< define in ldp_dds.h
 #elif USE_UDP_PROTO
 typedef struct net_data_w_udp net_data_w; //!< define in ldp_udp.h
+#elif USE_APEX_PORT
+typedef struct net_data_w_apex_port net_data_w; //!< define in ldp_apex_port.h
 #else
 typedef struct net_data_w net_data_w; //!< define in ldp_udp.h or in ldp_tcp.h
 #endif
@@ -307,9 +315,26 @@ ldp_status_t write_msg(ldp_logger_platform* logger_PF,
  *
  * @return     LDP_ERROR if the main process should stop, or LDP_SUCCESS
  */
+#if !USE_APEX_PORT
 ldp_status_t main_proc_consume_msg(ldp_Main_ctx* ctx,
 							char* buf,
                             const apr_pollfd_t* fd,
+							ldp_interface_ctx* read_interface_ctx,
+							ldp_interface_ctx* interface_ctx_array);
+#endif
+
+/**
+ * Consume one complete, message-oriented transport payload in the main
+ * process.
+ *
+ * Unlike main_proc_consume_msg(), this entry point never performs a second
+ * transport read.  It is intended for APEX queuing ports and other transports
+ * that deliver message boundaries.
+ */
+ldp_status_t main_proc_consume_complete_msg(
+							ldp_Main_ctx* ctx,
+							char* buf,
+							size_t buf_length,
 							ldp_interface_ctx* read_interface_ctx,
 							ldp_interface_ctx* interface_ctx_array);
 
@@ -391,10 +416,12 @@ void find_dest_mod_by_comp_and_send(ldp_PDomain_ctx* ctx, char* component_name, 
  * @param    read_socket     read socket to add in the poolset
  * @param    mem_pool        APR memory pool
  **/
+#if !USE_APEX_PORT
 void ldp_add_pollset(apr_pollset_t *pollset,
 					   ldp_interface_ctx* sock_interface,
 					   apr_socket_t* read_socket,
 					   apr_pool_t* mem_pool);
+#endif
 
 #endif /* _LDP_NETWORK_H */
 

@@ -9,10 +9,75 @@
 */
 
 #include <apr_network_io.h>
-#include <apr_poll.h>
 #include "ldp_network.h"
 #include <assert.h>
 #include "ldp_ELI_udp.h"
+
+#if USE_APEX_PORT
+
+/*
+ * ELI multicast is an external-platform transport and has no standard
+ * ARINC 653 queuing-port equivalent.  Keep explicit unsupported stubs in the
+ * APEX build so common ELI objects remain linkable without pulling APR socket
+ * operations into the target binary.
+ */
+apr_status_t ldp_create_read_multicast_interface(
+    ldp_inter_mcast* interface,
+    ldp_socket_info* ip_info,
+    ldp_logger_platform* logger_PF,
+    apr_pool_t* mp)
+{
+    UNUSED(interface);
+    UNUSED(ip_info);
+    UNUSED(logger_PF);
+    UNUSED(mp);
+    return APR_ENOTIMPL;
+}
+
+apr_status_t ldp_create_sent_multicast_interface(
+    ldp_inter_mcast* interface,
+    ldp_socket_info* ip_info,
+    ldp_logger_platform* logger_PF,
+    apr_pool_t* mp)
+{
+    UNUSED(interface);
+    UNUSED(ip_info);
+    UNUSED(logger_PF);
+    UNUSED(mp);
+    return APR_ENOTIMPL;
+}
+
+apr_status_t ldp_mcast_send(ldp_inter_mcast* interface,
+                            char* msg,
+                            uint64_t* msg_size,
+                            ldp_logger_platform* logger_PF)
+{
+    UNUSED(interface);
+    UNUSED(msg);
+    UNUSED(logger_PF);
+
+    if (msg_size != NULL) {
+        *msg_size = 0;
+    }
+    return APR_ENOTIMPL;
+}
+
+apr_status_t ldp_mcast_read(ldp_inter_mcast* interface,
+                            char* msg,
+                            uint64_t* msg_size,
+                            ldp_logger_platform* logger_PF)
+{
+    UNUSED(interface);
+    UNUSED(msg);
+    UNUSED(logger_PF);
+
+    if (msg_size != NULL) {
+        *msg_size = 0;
+    }
+    return APR_ENOTIMPL;
+}
+
+#else
 
 apr_status_t ldp_create_read_multicast_interface(ldp_inter_mcast* interface,
                                               ldp_socket_info* ip_info,
@@ -144,6 +209,7 @@ apr_status_t ldp_mcast_read(ldp_inter_mcast* interface,
     return ret;
 }
 
+#endif /* USE_APEX_PORT */
 
 ldp_PF_link* ldp_mcast_find_PF_link(ldp_interface_ctx* interface_ctx, ECOA__uint8 UDP_connected_PF_ID){
     for(int i=0; i < interface_ctx->inter.mcast.link_num; i++){

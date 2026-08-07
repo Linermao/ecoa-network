@@ -158,6 +158,41 @@ static ldp_interface_ctx* find_interface_by_target_port(ldp_PDomain_ctx* ctx,
 	return NULL;
 }
 
+static ldp_interface_ctx* find_interface_by_packet(ldp_PDomain_ctx* ctx,
+                                                   const LDP_DDS_Packet* packet,
+                                                   int* interface_index_out)
+{
+	const ldp_dds_control_route* control_route = NULL;
+	const ldp_dds_wire_route* wire_route = NULL;
+	uint32_t target_port = 0;
+
+	if (packet == NULL) {
+		return NULL;
+	}
+
+	control_route = ldp_dds_find_control_route_by_interface(packet->interface_id);
+	if (control_route != NULL) {
+		target_port = (uint32_t)control_route->target_legacy_port;
+	} else {
+		wire_route = ldp_dds_find_wire_route_by_interface(packet->interface_id);
+		if (wire_route != NULL) {
+			target_port = (uint32_t)wire_route->target_legacy_port;
+		} else {
+			target_port = packet->target_port;
+		}
+	}
+
+	ldp_interface_ctx* interface_ctx = find_interface_by_target_port(ctx,
+	                                                               target_port,
+	                                                               interface_index_out);
+	if (interface_ctx == NULL && target_port != packet->target_port) {
+		interface_ctx = find_interface_by_target_port(ctx,
+		                                             packet->target_port,
+		                                             interface_index_out);
+	}
+	return interface_ctx;
+}
+
 static char* copy_payload_for_delivery(ldp_PDomain_ctx* ctx, LDP_DDS_Packet* packet)
 {
 	char* delivery_buffer = NULL;
@@ -287,6 +322,7 @@ static ldp_status_t deliver_eli_datagram(ldp_PDomain_ctx* ctx,
 
 	status = ldp_read_ELI_header(&ELI_header, channel->buffer, 0, &read_bytes);
 	if (status != ELI_STATUS__OK) {
+		channel->is_used = false;
 		return LDP_ERROR;
 	}
 
@@ -299,14 +335,17 @@ static ldp_status_t deliver_eli_datagram(ldp_PDomain_ctx* ctx,
 		                   channel->offset - read_bytes,
 		                   interface_ctx->info_r.addr,
 		                   interface_ctx->info_r.port);
+		channel->is_used = false;
 		return LDP_ERROR;
 	}
 
 	if (ELI_header.domain == LDP_ELI_PLATFORM_MNG) {
-		return process_eli_management_msg(ctx,
-		                                  interface_ctx,
-		                                  &ELI_header,
-		                                  &channel->buffer[read_bytes]);
+		status = process_eli_management_msg(ctx,
+		                                    interface_ctx,
+		                                    &ELI_header,
+		                                    &channel->buffer[read_bytes]);
+		channel->is_used = false;
+		return status;
 	}
 
 	if (ELI_header.domain == LDP_ELI_SERVICE_OP) {
@@ -318,6 +357,7 @@ static ldp_status_t deliver_eli_datagram(ldp_PDomain_ctx* ctx,
 		                        interface_ctx->info_r.port,
 		                        ELI_header.sequence_num,
 		                        UDP_header.platform_ID);
+		channel->is_used = false;
 		return LDP_SUCCESS;
 	}
 
@@ -328,6 +368,7 @@ static ldp_status_t deliver_eli_datagram(ldp_PDomain_ctx* ctx,
 	                   ELI_header.domain,
 	                   interface_ctx->info_r.addr,
 	                   interface_ctx->info_r.port);
+	channel->is_used = false;
 	return LDP_ERROR;
 }
 
@@ -335,9 +376,9 @@ static ldp_status_t deliver_packet(ldp_PDomain_ctx* ctx, LDP_DDS_Packet* packet)
 {
 	ldp_status_t status = LDP_SUCCESS;
 	int target_index = -1;
-	ldp_interface_ctx* target_interface = find_interface_by_target_port(ctx,
-	                                                                    packet->target_port,
-	                                                                    &target_index);
+	ldp_interface_ctx* target_interface = find_interface_by_packet(ctx,
+	                                                               packet,
+	                                                               &target_index);
 	char* delivery_buffer = NULL;
 	uint32_t op_ID = 0;
 	uint32_t param_size = 0;
@@ -417,29 +458,39 @@ static ldp_status_t deliver_packet(ldp_PDomain_ctx* ctx, LDP_DDS_Packet* packet)
 static ldp_status_t run_dds_component_server(ldp_PDomain_ctx* ctx, ldp_dds_runtime* runtime)
 {
 	while (true) {
-		void* samples[8] = { NULL };
-		dds_sample_info_t infos[8];
-		memset(infos, 0, sizeof(infos));
+		bool took_sample = false;
 
-		dds_return_t ret = dds_take(runtime->data_reader, samples, infos, 8, 8);
-		if (ret < 0) {
-			fprintf(stderr, "[DDS] dds_take failed: %s\n", dds_strretcode(-ret));
-			return LDP_ERROR;
-		}
+		for (size_t endpoint_i = 0; endpoint_i < runtime->endpoint_count; ++endpoint_i) {
+			ldp_dds_topic_endpoint* endpoint = &runtime->endpoints[endpoint_i];
+			void* samples[8] = { NULL };
+			dds_sample_info_t infos[8];
+			memset(infos, 0, sizeof(infos));
 
-		for (int i = 0; i < ret; ++i) {
-			if (infos[i].valid_data) {
-				ldp_status_t status = deliver_packet(ctx, (LDP_DDS_Packet*)samples[i]);
-				if (status == LDP_ERROR) {
-					dds_return_loan(runtime->data_reader, samples, ret);
-					return LDP_ERROR;
+			dds_return_t ret = dds_take(endpoint->reader, samples, infos, 8, 8);
+			if (ret < 0) {
+				fprintf(stderr, "[DDS] dds_take failed: %s\n", dds_strretcode(-ret));
+				return LDP_ERROR;
+			}
+
+			for (int i = 0; i < ret; ++i) {
+				if (infos[i].valid_data &&
+				    ldp_dds_packet_targets_runtime(runtime,
+				                                   (LDP_DDS_Packet*)samples[i])) {
+					ldp_status_t status = deliver_packet(ctx, (LDP_DDS_Packet*)samples[i]);
+					if (status == LDP_ERROR) {
+						dds_return_loan(endpoint->reader, samples, ret);
+						return LDP_ERROR;
+					}
 				}
+			}
+
+			if (ret > 0) {
+				took_sample = true;
+				dds_return_loan(endpoint->reader, samples, ret);
 			}
 		}
 
-		if (ret > 0) {
-			dds_return_loan(runtime->data_reader, samples, ret);
-		} else {
+		if (!took_sample) {
 			dds_sleepfor(DDS_MSECS(10));
 		}
 	}
@@ -508,12 +559,27 @@ void ldp_start_comp_server(ldp_PDomain_ctx* ctx)
 		return;
 	}
 
+	{
+		const ldp_dds_entity_route* entity_route = ldp_dds_find_entity_route_by_name(ctx->name);
+		if (entity_route == NULL ||
+		    ldp_dds_runtime_add_target_entity(runtime, entity_route->id) != LDP_SUCCESS) {
+			ldp_log_PF_log_var(ECOA_LOG_ERROR_PF,
+			                   "ERROR",
+			                   ctx->logger_PF,
+			                   "[DDS] cannot register PD entity '%s'",
+			                   ctx->name);
+			destroy_component_interfaces(ctx, initialized_count);
+			return;
+		}
+	}
+
 	for (int i = 0; i < ctx->mcast_read_interface_num; ++i) {
 		ldp_interface_ctx* interface_ctx = &ctx->mcast_read_interface[i];
 		interface_ctx->type = LDP_ELI_MCAST;
 		initialize_mcast_links(interface_ctx,
 		                       ctx->msg_buffer_size + LDP_ELI_UDP_HEADER_SIZE + LDP_ELI_HEADER_SIZE);
-		if (ldp_dds_runtime_add_target_port(runtime, (uint32_t)interface_ctx->info_r.port) != LDP_SUCCESS) {
+		if (interface_ctx->info_r.port > 0 &&
+		    ldp_dds_runtime_add_target_port(runtime, (uint32_t)interface_ctx->info_r.port) != LDP_SUCCESS) {
 			ldp_log_PF_log_var(ECOA_LOG_ERROR_PF,
 			                   "ERROR",
 			                   ctx->logger_PF,

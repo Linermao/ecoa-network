@@ -8,12 +8,7 @@
 
 #include "ldp_network.h"
 #include "ldp_structures.h"
-
-#define SENDER_CONTROL_PORT 46001
-#define MAIN_SENDER_PORT 41001
-#define RECEIVER_DATA_PORT 30002
-#define OP_DATA 42
-#define OP_ACK 43
+#include "route.h"
 
 static volatile int g_ack_received = 0;
 
@@ -121,13 +116,13 @@ int main(void)
 	memset(&process, 0, sizeof(process));
 
 	process.interfaces[0].type = LDP_LOCAL_IP;
-	process.interfaces[0].info_r = (ldp_tcp_info){ SENDER_CONTROL_PORT, "127.0.0.1", 1, true };
+	process.interfaces[0].info_r = (ldp_tcp_info){ SENDER_CONTROL_PORT, SENDER_CONTROL_ADDR, 1, true };
 
 	process.interfaces[1].type = LDP_LOCAL_IP;
-	process.interfaces[1].info_r = (ldp_tcp_info){ MAIN_SENDER_PORT, "127.0.0.1", 1, true };
+	process.interfaces[1].info_r = (ldp_tcp_info){ MAIN_SENDER_PORT, MAIN_SENDER_ADDR, 1, true };
 
 	process.interfaces[2].type = LDP_LOCAL_IP;
-	process.interfaces[2].info_r = (ldp_tcp_info){ RECEIVER_DATA_PORT, "127.0.0.1", 1, true };
+	process.interfaces[2].info_r = (ldp_tcp_info){ RECEIVER_DATA_PORT, RECEIVER_DATA_ADDR, 1, true };
 
 	process.ctx.name = "PD_sender_PD";
 	process.ctx.mem_pool = mem_pool;
