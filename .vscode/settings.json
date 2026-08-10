@@ -6,11 +6,11 @@
   "cmake.configureArgs": [
     "-DCMAKE_BUILD_TYPE=Debug",
     "-DAPR_INCLUDE_DIR=${env:APR_INCLUDE_DIR}",
-    "-DLDP_LOCAL_TRANSPORT=TCP",
+    "-DLDP_LOCAL_TRANSPORT=APEX",
     "-DUSE_APEX_API=ON",
     "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON"
   ],
-  "C_Cpp.intelliSenseEngine": "default",
+  "C_Cpp.intelliSenseEngine": "disabled",
   "C_Cpp.default.configurationProvider": "ms-vscode.cmake-tools",
   "C_Cpp.default.compileCommands": "${workspaceFolder}/build/example/compile_commands.json",
   "C_Cpp.default.includePath": [
@@ -21,6 +21,7 @@
     "${workspaceFolder}/lib/tcp",
     "${workspaceFolder}/lib/udp",
     "${workspaceFolder}/lib/dds",
+    "${workspaceFolder}/lib/apex_port",
     "${workspaceFolder}"
   ],
   "C_Cpp.default.defines": [

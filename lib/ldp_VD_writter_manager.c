@@ -15,7 +15,7 @@
 #include "ldp_structures.h"
 
 void ldp_init_writter_mng(ldp_VD_writter_mng* writter_mng){
-	if (writter_mng->repo_VD != NULL && writter_mng->repo_VD->mode == CONTROLLED){
+	if (writter_mng->repo_VD != NULL && writter_mng->repo_VD->mode == LDP_VD_CONTROLLED){
 		for (int i=0; i<writter_mng->num_copies; i++){
 			writter_mng->VD_copies_ptr[i] = NULL;
 		}
@@ -29,7 +29,7 @@ void ldp_create_writter_mng(ldp_VD_writter_mng* writter_mng, ldp_repository_VD* 
 								 int num_copies, ldp_VD_written_mng_mode mode){
 	writter_mng->repo_VD = repo_VD;
 	writter_mng->num_copies = num_copies;
-	if (repo_VD != NULL && repo_VD->mode == CONTROLLED){
+	if (repo_VD != NULL && repo_VD->mode == LDP_VD_CONTROLLED){
 		writter_mng->VD_copies_ptr = calloc(writter_mng->num_copies, sizeof(ldp_VD_copy*));
 	}
 	writter_mng->mode = mode;
@@ -86,7 +86,7 @@ static void notify_readers(ldp_module_context* ctx,ldp_repository_VD* repo){
  * @param      handle       The handle containing the pointer to the copy to release
  */
 static void release_written_access(ldp_VD_writter_mng* writter_mng, ldp_VD_handle* handle){
-	if(writter_mng->repo_VD->mode == CONTROLLED){
+	if(writter_mng->repo_VD->mode == LDP_VD_CONTROLLED){
 		writter_mng->VD_copies_ptr[handle->VD_copy_index] = NULL;
 	}
 	writter_mng->num_used_copies--;
@@ -103,7 +103,7 @@ ldp_status_t ldp_get_written_access(ldp_VD_writter_mng* writter_mng, ldp_VD_hand
 
 	ldp_repository_VD* VD_repo = writter_mng->repo_VD;
 
-	if (VD_repo->mode == CONTROLLED){
+	if (VD_repo->mode == LDP_VD_CONTROLLED){
 		// find access
 		int VD_copy_ptr_index = find_written_access_index_controlled(writter_mng);
 		if (VD_copy_ptr_index == -1){
@@ -126,7 +126,7 @@ ldp_status_t ldp_get_written_access(ldp_VD_writter_mng* writter_mng, ldp_VD_hand
 			ldp_reset_handle(handle);
 		}else{
 			// make copy only in read-write mode:
-			if(writter_mng->mode == READ_WRITE){
+			if(writter_mng->mode == LDP_VD_READ_WRITE){
 				ret = ldp_copy_VD_data(VD_repo, copy_ptr->data, true);
 			}else{
 				// WRITE_ONLY mode
@@ -171,7 +171,7 @@ ldp_status_t ldp_publish_written_access(ldp_module_context* ctx, ldp_VD_writter_
 
 	ldp_repository_VD* VD_repo = writter_mng->repo_VD;
 
-	if(VD_repo->mode == CONTROLLED){
+	if(VD_repo->mode == LDP_VD_CONTROLLED){
 		//controlled mode
 		ldp_VD_copy* new_VD_ptr = writter_mng->VD_copies_ptr[handle->VD_copy_index];
 		apr_thread_mutex_lock(VD_repo->mutex);
@@ -208,10 +208,10 @@ ldp_status_t ldp_cancel_written_access(ldp_VD_writter_mng* writter_mng, ldp_VD_h
 
 	// check handle
 	if (handle != NULL && handle->VD_copy_index != -1){
-		if(writter_mng->repo_VD->mode == CONTROLLED){
+		if(writter_mng->repo_VD->mode == LDP_VD_CONTROLLED){
 			// Controlled mode : release VD_copy in repository
 			ldp_VD_copy* copy = writter_mng->VD_copies_ptr[handle->VD_copy_index];
-			copy->state = FREE;
+			copy->state = LDP_VD_COPY_FREE;
 		}else{
 			// not controlled mode : nothing to do
 		}

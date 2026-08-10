@@ -40,7 +40,7 @@ static char opwait[12] = "Wait";
 static char PDtype[12] = "*PD";
 static char all_ref[12] = "*";
 
-static void log_wait_request(int duration, char durationunit[12], ldp_logger_platform* logger_PF){
+static void log_wait_request(int duration, const char* durationunit, ldp_logger_platform* logger_PF){
     /**
  * @brief      Displays that a Wait Request is executed.
  */
@@ -54,7 +54,7 @@ static void log_wait_request(int duration, char durationunit[12], ldp_logger_pla
     }
 }
 
-static bool wait_for(int duration, char durationunit[12], ldp_logger_platform* logger_PF){
+static bool wait_for(int duration, const char* durationunit, ldp_logger_platform* logger_PF){
     /**
  * @brief      Waits for the requested time to wait using apr_sleep.
  *
@@ -286,11 +286,11 @@ void * launch_func(apr_thread_t* t, void* args){
 
         if(!emptyline(&linec[0]))
         {
-            sscanf(linec, "%s", optype);
+            sscanf(linec, "%11s", optype);
             if ( strncmp (optype, opwait, 12) == 0)
             {
                 // Wait
-                sscanf(linec, "%s %i %s", optype, &duration, durationunit);
+                sscanf(linec, "%11s %i %3s", optype, &duration, durationunit);
                 if (!wait_for(duration, durationunit, logger_PF)){
                     ldp_log_PF_log_var(ECOA_LOG_WARN_PF,"WARN", logger_PF,
 					                     "[Launcher_Thread] Warning : In launcher.txt line %i: Error in Wait Request. No wait",

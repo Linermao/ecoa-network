@@ -1,6 +1,15 @@
 #ifndef APEX_APR_APR_THREAD_PROC_H
 #define APEX_APR_APR_THREAD_PROC_H
 
+#ifdef USE_APEX_API
+/*
+ * Establish the shimmed pool type before APR declares thread APIs which take
+ * an apr_pool_t argument. This keeps the declarations consistent regardless
+ * of the order in which project headers include pools and thread/process APIs.
+ */
+#include <apr_pools.h>
+#endif
+
 #include_next <apr_thread_proc.h>
 
 #ifdef USE_APEX_API

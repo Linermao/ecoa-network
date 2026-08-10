@@ -38,29 +38,45 @@ APR/APEX 兼容层和 DDS transport 是两条并行工作线。APR 兼容层位�
 - `lib/apex_apr/src/apr_pools.c`
 - `lib/apex_apr/include/apr_strings.h`
 - `lib/apex_apr/src/apr_strings.c`
+- `lib/apex_apr/include/apr_thread_mutex.h`
+- `lib/apex_apr/src/apr_thread_mutex.c`
+- `lib/apex_apr/include/apr_thread_cond.h`
+- `lib/apex_apr/src/apr_thread_cond.c`
 
-这些 wrapper 目前分成两种过渡模式：
+`USE_APEX_API=ON` 是 APR/APEX 兼容层唯一的总开关。启用后会同时接管
+time、pool、status、string、mutex、condition 以及相关 APR 类型；不再需要额外的
+extended 开关。CMake 不注入任何临时 APEX SDK 头文件路径：当前开发环境仅通过
+本机 `.clangd` 提供编辑器诊断所需的过渡头文件，真实目标构建应由平台工具链提供
+正式的 APEX 头文件。
 
-- 运行时相关接口：打印一行 trace，然后委托真实 APR。
-- APR 原本就是宏的接口：打印一行 trace，然后在 shim 内做等价兼容计算。
+例如，可以在仓库根目录创建仅供本机使用的 `.clangd`：
 
-当前已覆盖的接口包括：
+```yaml
+CompileFlags:
+  Add:
+    # 当前过渡环境的公开 APEX 头文件
+    - -I/absolute/path/to/apex-sdk/include
+    # 如果当前 SDK 还有单独的生成头文件目录，可以临时追加这一项
+    - -I/absolute/path/to/apex-sdk/generated/include
 
-- `apr_initialize`
-- `apr_terminate`
-- `apr_strerror`
-- `apr_sleep`
-- `apr_time_now`
-- `apr_time_from_sec`
-- `apr_time_usec`
-- `apr_pool_create`
-- `apr_pool_destroy`
-- `apr_palloc`
-- `apr_pcalloc`
-- `apr_psprintf`
-- `apr_cpystrn`
+---
 
-类型和常量方面，`apr_status_t` 目前仍沿用系统 APR 定义，`APR_SUCCESS` 与 `APR_EGENERAL` 保持 APR 兼容值；后续如果切换到 APEX 状态模型，应当按 `apr_errno` 模块整体替换，而不是零散改 typedef 或单个宏。
+If:
+  PathMatch: ^lib/apex_apr/include/.*\.h$
+
+CompileFlags:
+  # 编辑 shim 头文件时移除其自身 include 目录，使 #include_next 能找到真实 APR 头。
+  Remove:
+    - -I/absolute/path/to/ecoa-network/lib/apex_apr/include
+```
+
+这里建议使用绝对路径，因为 `.clangd` 添加的相对 include 路径会相对于
+`compile_commands.json` 中记录的编译工作目录解释。仓库已忽略 `.clangd`，因此
+每位开发者可以按本机 SDK 位置配置；切换到真实平台 SDK 时只需替换这里的路径。
+该配置只影响 clangd，不会传递给 CMake 或真实编译器。
+
+`lib/apex_port/` 仍是独立的 LDP 网络后端，由 `LDP_LOCAL_TRANSPORT=APEX`
+选择。传输后端选择和 APR/APEX API 兼容层属于两个不同维度。
 
 后续替换新函数时，优先按 APR 模块拆分成一组同名 shim 头和对应实现文件，例如 `apr_thread_mutex.h` / `apr_thread_mutex.c`。
 

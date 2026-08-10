@@ -36,20 +36,20 @@ typedef enum ldp_VD_reader_nature{
 
 //! Possible state of a VD copies
 typedef enum ldp_VD_copies_state{
-    FREE, //!< no reader and no writter
-    USED  //!< is used by readers or/and writters
+    LDP_VD_COPY_FREE, //!< no reader and no writter
+    LDP_VD_COPY_USED  //!< is used by readers or/and writters
 }ldp_VD_copies_state;
 
 //! Option for the behaviour of a writter
 typedef enum ldp_VD_written_mng_mode{
-    WRITE_ONLY, //!< writer takes a written access that doesn't contain a copy of the data but inconsistant data
-    READ_WRITE  //!< writer takes a written access that contains a copy of the last published data
+    LDP_VD_WRITE_ONLY, //!< writer takes a written access that doesn't contain a copy of the data but inconsistant data
+    LDP_VD_READ_WRITE  //!< writer takes a written access that contains a copy of the last published data
 }ldp_VD_written_mng_mode;
 
 //! Option for the behavoiur of a VD repository
 typedef enum ldp_VD_repository_mode{
-    CONTROLLED,  //!< normal behaviour of VD: reader/writter can access VD safety
-    UNCONTROLLED //!< the access to the data is concurrent. Only one copy of the data
+    LDP_VD_CONTROLLED,  //!< normal behaviour of VD: reader/writter can access VD safety
+    LDP_VD_UNCONTROLLED //!< the access to the data is concurrent. Only one copy of the data
 }ldp_VD_repository_mode;
 
 /**

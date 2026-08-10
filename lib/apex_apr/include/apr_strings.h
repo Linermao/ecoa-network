@@ -3,7 +3,7 @@
 
 #include_next <apr_strings.h>
 
-#include <apex_apr_size.h>
+#include "apex_apr_size.h"
 
 #ifdef USE_APEX_API
 

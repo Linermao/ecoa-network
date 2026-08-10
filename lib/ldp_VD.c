@@ -45,7 +45,7 @@ void ldp_init_repository(ldp_repository_VD* repo){
 	// allocate memory
 	for(int i=0; i<repo->num_VD_copies;i++){
 		repo->VD_copies[i].num_readers = 0;
-		repo->VD_copies[i].state = FREE;
+		repo->VD_copies[i].state = LDP_VD_COPY_FREE;
 		repo->VD_copies[i].to_be_release=false;
 		memset(repo->VD_copies[i].data, 0, repo->VD_copies[i].data_size);
 	}
@@ -53,7 +53,7 @@ void ldp_init_repository(ldp_repository_VD* repo){
 	// init structures
 	repo->stamp = 0;
 
-	if(repo->mode == CONTROLLED){
+	if(repo->mode == LDP_VD_CONTROLLED){
 		repo->repository_ptr = NULL;
 	}else{
 		repo->repository_ptr = &repo->VD_copies[0]; // will never change
@@ -145,8 +145,8 @@ ldp_status_t ldp_copy_VD_data(ldp_repository_VD* repo, unsigned char* data_dest,
 ldp_VD_copy* ldp_get_written_VD_copy(ldp_repository_VD* repo){
 	// NOT THREAD SAFE
 	for(int i=0; i<repo->num_VD_copies; i++){
-		if (repo->VD_copies[i].state == FREE){
-			repo->VD_copies[i].state = USED;
+		if (repo->VD_copies[i].state == LDP_VD_COPY_FREE){
+			repo->VD_copies[i].state = LDP_VD_COPY_USED;
 			return &repo->VD_copies[i];
 		}
 	}
@@ -157,7 +157,7 @@ void ldp_release_written_VD_copy(ldp_VD_copy* copy){
 	// NOT THREAD SAFE
 	// release copy if necessary
 	if ((copy->to_be_release) && (copy->num_readers == 1)){
-		copy->state = FREE;
+		copy->state = LDP_VD_COPY_FREE;
 		copy->to_be_release = false;
 		copy->num_readers = 0;
 	}else{
@@ -172,7 +172,7 @@ void ldp_move_repository_ptr(ldp_repository_VD* repo, ldp_VD_copy* new_ptr){
 		// Not first write : old copy has to be released
 		if(repo->repository_ptr->num_readers == 0){
 			// no readers. free old copy
-			repo->repository_ptr->state = FREE;
+			repo->repository_ptr->state = LDP_VD_COPY_FREE;
 		}else{
 			// indicate to readers that this old copy has to be released
 			repo->repository_ptr->to_be_release = true;
