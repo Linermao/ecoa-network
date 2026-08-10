@@ -20,7 +20,6 @@
 #include "ldp_time_manager.h"
 #include "ldp_structures.h"
 #include "ldp_dynamic_trigger.h"
-#include <stdint.h>
 #include "ldp_status_error.h"
 
 /**

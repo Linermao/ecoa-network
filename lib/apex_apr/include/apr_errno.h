@@ -4,7 +4,7 @@
 #include_next <apr_errno.h>
 
 #include <errno.h>
-#include <apex_apr_size.h>
+#include "apex_apr_size.h"
 
 #ifdef USE_APEX_API
 

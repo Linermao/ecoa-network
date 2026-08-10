@@ -20,7 +20,6 @@ extern "C" {
 #include <apr_thread_mutex.h>
 #include <apr_thread_cond.h>
 #include <apr_thread_proc.h>
-#include <apr_thread_mutex.h>
 #include "ldp_VD.h"
 #include "ldp_log.h"
 #include "ldp_log_platform.h"

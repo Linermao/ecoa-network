@@ -15,9 +15,9 @@
 #include "ldp_structures.h"
 
 void ldp_init_reader_mng(ldp_VD_reader_mng* reader_mng){
-	if (reader_mng->repo_VD != NULL && reader_mng->repo_VD->mode == CONTROLLED){
+	if (reader_mng->repo_VD != NULL && reader_mng->repo_VD->mode == LDP_VD_CONTROLLED){
 		for (int i=0; i<reader_mng->num_copies; i++){
-			reader_mng->VD_data_copies[i].state = FREE;
+			reader_mng->VD_data_copies[i].state = LDP_VD_COPY_FREE;
 			memset(reader_mng->VD_data_copies[i].data, 0,reader_mng->repo_VD->data_size);
 		}
 	}else{
@@ -30,7 +30,7 @@ void ldp_create_reader_mng(ldp_VD_reader_mng* reader_mng, ldp_repository_VD* rep
 	reader_mng->repo_VD = repo_VD;
 	reader_mng->num_copies = num_copies;
 
-	if (repo_VD != NULL && repo_VD->mode == CONTROLLED){
+	if (repo_VD != NULL && repo_VD->mode == LDP_VD_CONTROLLED){
 		reader_mng->VD_data_copies = calloc(reader_mng->num_copies,sizeof(ldp_VD_read_copy));
 		for(int i=0; i<reader_mng->num_copies; i++){
 			reader_mng->VD_data_copies[i].data = malloc(repo_VD->data_size);
@@ -42,7 +42,7 @@ void ldp_create_reader_mng(ldp_VD_reader_mng* reader_mng, ldp_repository_VD* rep
 }
 
 void ldp_destroy_reader_mng(ldp_VD_reader_mng* reader_mng){
-	if(reader_mng->repo_VD != NULL && reader_mng->repo_VD->mode == CONTROLLED){
+	if(reader_mng->repo_VD != NULL && reader_mng->repo_VD->mode == LDP_VD_CONTROLLED){
 		for(int i=0; i<reader_mng->num_copies; i++){
 			free(reader_mng->VD_data_copies[i].data);
 		}
@@ -80,9 +80,9 @@ static ldp_status_t get_read_access_Control(ldp_VD_reader_mng* reader_mng,
 	int local_copy_index=-1;
 	if (reader_mng->num_used_copies < reader_mng->num_copies){
 		for(int i=0; i<reader_mng->num_copies; i++){
-			if(reader_mng->VD_data_copies[i].state == FREE){
+			if(reader_mng->VD_data_copies[i].state == LDP_VD_COPY_FREE){
 				local_copy_index = i;
-				reader_mng->VD_data_copies[i].state = USED;
+				reader_mng->VD_data_copies[i].state = LDP_VD_COPY_USED;
 				reader_mng->num_used_copies++;
 				break;
 			}
@@ -120,7 +120,7 @@ ldp_status_t ldp_get_read_access(ldp_VD_reader_mng* reader_mng, ldp_VD_handle* h
 
 	// check reader_mng
 	if(VD_repo != NULL && VD_repo->repository_ptr != NULL){
-		if (VD_repo->mode == CONTROLLED){
+		if (VD_repo->mode == LDP_VD_CONTROLLED){
 			ret = get_read_access_Control(reader_mng, handle);
 		}else{
 			ret = get_read_access_NoControl(reader_mng, handle);
@@ -141,8 +141,8 @@ ldp_status_t ldp_release_read_access(ldp_VD_reader_mng* reader_mng, ldp_VD_handl
 	if (handle != NULL && handle->VD_copy_index != -1){
 		ret = ECOA__return_status_OK;
 
-		if (reader_mng->repo_VD->mode == CONTROLLED){
-			reader_mng->VD_data_copies[handle->VD_copy_index].state = FREE;
+		if (reader_mng->repo_VD->mode == LDP_VD_CONTROLLED){
+			reader_mng->VD_data_copies[handle->VD_copy_index].state = LDP_VD_COPY_FREE;
 		}else{
 			// nothing to do
 		}
