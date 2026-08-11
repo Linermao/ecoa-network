@@ -60,6 +60,34 @@ typedef apr_exit_why_e apex_apr_exit_why_e;
 #define apr_procattr_t apex_apr_procattr_t
 #define apr_exit_why_e apex_apr_exit_why_e
 
+/*
+ * Keep the first thread shim intentionally narrow. These are the process
+ * thread APIs currently used by LDP. They deliberately do not delegate to
+ * system APR: an APEX pool is not binary-compatible with an APR pool, and a
+ * POSIX thread is not an ARINC 653 PROCESS. The source currently fails these
+ * calls explicitly until the target APEX Process Service is bound.
+ *
+ * The eventual mapping is CREATE_PROCESS + START. Its entry-point trampoline
+ * will recover the APR callback/context from the APEX process identifier.
+ * JOIN needs a separate completion semaphore/event because APEX has no direct
+ * PROCESS join primitive.
+ */
+apr_status_t apex_apr_threadattr_create(apr_threadattr_t **new_attr,
+                                        apr_pool_t *pool);
+apr_status_t apex_apr_thread_create(apr_thread_t **new_thread,
+                                    apr_threadattr_t *attr,
+                                    apr_thread_start_t func,
+                                    void *data,
+                                    apr_pool_t *pool);
+apr_status_t apex_apr_thread_join(apr_status_t *retval,
+                                  apr_thread_t *thread);
+apr_pool_t *apex_apr_thread_pool_get(const apr_thread_t *thread);
+
+#define apr_threadattr_create apex_apr_threadattr_create
+#define apr_thread_create apex_apr_thread_create
+#define apr_thread_join apex_apr_thread_join
+#define apr_thread_pool_get apex_apr_thread_pool_get
+
 #endif /* USE_APEX_API */
 
 #endif /* APEX_APR_APR_THREAD_PROC_H */
