@@ -15,9 +15,11 @@ extern "C" {
 #ifndef _LDP_TRIGGER_H
 #define _LDP_TRIGGER_H
 
+#ifndef USE_APEX_API
 #include <time.h>
 #include <signal.h>
 #include <sys/syscall.h>
+#endif
 #include <apr.h>
 #include <apr_thread_proc.h>
 
@@ -25,8 +27,10 @@ extern "C" {
 #include "ldp_structures.h"
 #include "ldp_status_error.h"
 
+#ifndef USE_APEX_API
 #define CLOCKID CLOCK_REALTIME //!< clock used to measure time
 #define SIG SIGRTMIN //!< signal raised by a trigger to wake up a thread
+#endif
 
 //! structure for event of an trigger module. Handle all periods, operations,...
 typedef struct ldp_trigger_event_context_t{
@@ -43,11 +47,12 @@ typedef struct ldp_event_thread_timer_attr_t{
 }ldp_event_thread_timer_attr;
 
 /**
- * @brief create a timer : create a pthread_timer that will send a signal to the specific thread_id
+ * @brief create a POSIX timer : Unix-only implementation detail
  * @param timer will contains timer created
  * @param thread_id tid of thread to be wakeup by timer
  * @return LDP_ERROR in case of failure or LDP_SUCCESS
  */
+#ifndef USE_APEX_API
 ldp_status_t ldp_create_timer(timer_t* timer, pid_t thread_id);
 /**
  * @brief start timer by setting period
@@ -71,6 +76,7 @@ ldp_status_t ldp_stop_timer(timer_t timer);
  * @note should never return
  */
 void* ldp_event_thread_timer(void* args);
+#endif
 
 /**
  * @brief start module trigger thread
