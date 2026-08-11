@@ -88,6 +88,14 @@ apr_status_t apex_apr_thread_join(apr_status_t *retval,
                                   apr_thread_t *thread);
 apr_pool_t *apex_apr_thread_pool_get(const apr_thread_t *thread);
 void apex_apr_threadattr_set_name(apr_threadattr_t *attr, const char *name);
+apr_status_t apex_apr_threadattr_set_stacksize(apr_threadattr_t *attr,
+							apr_size_t stack_size);
+apr_status_t apex_apr_threadattr_set_priority(apr_threadattr_t *attr,
+							PRIORITY_TYPE priority);
+apr_status_t apex_apr_threadattr_set_period(apr_threadattr_t *attr,
+						  apr_interval_time_t period);
+apr_status_t apex_apr_threadattr_set_time_capacity(apr_threadattr_t *attr,
+							   apr_interval_time_t time_capacity);
 
 #define apr_threadattr_create apex_apr_threadattr_create
 #define apr_thread_create apex_apr_thread_create
