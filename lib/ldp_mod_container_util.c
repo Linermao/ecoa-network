@@ -19,7 +19,6 @@
 #include "ldp_request_response.h"
 #include "ldp_log_platform.h"
 #include "ldp_dynamic_trigger.h"
-#include <pthread.h>
 #include "ldp_fifo_manager.h"
 #include "ldp_comp_util.h"
 
@@ -703,6 +702,7 @@ void ldp_mod_start_RR_trigger(ldp_module_context* ctx, apr_thread_t** RR_dyn_tri
     ctx->req_resp.trig_ctx->state = RUNNING;
     ctx->req_resp.trig_ctx->logger_PF = ctx->logger_PF;
     ctx->req_resp.trig_ctx->component_ctx = ctx->component_ctx;
+	ctx->req_resp.trig_ctx->mem_pool = ctx->mem_pool;
 
     ldp_init_dynamic_trigger(ctx->req_resp.trig_ctx);
     apr_threadattr_t* attr;
@@ -724,9 +724,9 @@ void ldp_mod_start_RR_trigger(ldp_module_context* ctx, apr_thread_t** RR_dyn_tri
                                 ctx->mem_pool);
     assert(ret==APR_SUCCESS);
 
-    pthread_mutex_lock(&ctx->req_resp.trig_ctx->mutex);
-    pthread_cond_signal(&ctx->req_resp.trig_ctx->cond);
-    pthread_mutex_unlock(&ctx->req_resp.trig_ctx->mutex);
+    apr_thread_mutex_lock(ctx->req_resp.trig_ctx->mutex);
+    apr_thread_cond_signal(ctx->req_resp.trig_ctx->cond);
+    apr_thread_mutex_unlock(ctx->req_resp.trig_ctx->mutex);
 
     UNUSED(ret);
 }
@@ -735,9 +735,9 @@ void ldp_mod_stop_RR_trigger(ldp_module_context* ctx, apr_thread_t* RR_dyn_trigg
     ctx->req_resp.trig_ctx->state = IDLE;// invalid loop condition of thread
 
     // unlock thread
-    pthread_mutex_lock(&ctx->req_resp.trig_ctx->mutex);
-    pthread_cond_signal(&ctx->req_resp.trig_ctx->cond);
-    pthread_mutex_unlock(&ctx->req_resp.trig_ctx->mutex);
+    apr_thread_mutex_lock(ctx->req_resp.trig_ctx->mutex);
+    apr_thread_cond_signal(ctx->req_resp.trig_ctx->cond);
+    apr_thread_mutex_unlock(ctx->req_resp.trig_ctx->mutex);
     apr_status_t ret_val;
 
     // wait thread

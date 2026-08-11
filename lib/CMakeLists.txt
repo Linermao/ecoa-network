@@ -32,7 +32,15 @@ else()
 	file(GLOB ${PROJECT_NAME}_proto_src tcp/*.c)
 endif()
 
-if(UNIX)
+if(USE_APEX_API)
+	list(REMOVE_ITEM ${PROJECT_NAME}_src
+		${CMAKE_CURRENT_LIST_DIR}/ldp_trigger.c)
+	set(${PROJECT_NAME}_platform_src
+		${CMAKE_CURRENT_LIST_DIR}/apex/ldp_thread.c
+		${CMAKE_CURRENT_LIST_DIR}/apex/ldp_fine_grain_deployment.c
+		${CMAKE_CURRENT_LIST_DIR}/apex/ldp_time_manager.c
+		${CMAKE_CURRENT_LIST_DIR}/apex/ldp_trigger.c)
+elseif(UNIX)
 	file(GLOB ${PROJECT_NAME}_platform_src unix/*.c)
 elseif(WIN32)
 	file(GLOB ${PROJECT_NAME}_platform_src win32/*.c)
@@ -71,6 +79,7 @@ if(USE_APEX_API)
 		${CMAKE_CURRENT_LIST_DIR}/apex_apr/src/apr_strings.c
 		${CMAKE_CURRENT_LIST_DIR}/apex_apr/src/apr_thread_cond.c
 		${CMAKE_CURRENT_LIST_DIR}/apex_apr/src/apr_thread_mutex.c
+		${CMAKE_CURRENT_LIST_DIR}/apex_apr/src/apr_thread_proc.c
 		${CMAKE_CURRENT_LIST_DIR}/apex_apr/src/apr_time.c
 	)
 endif()
