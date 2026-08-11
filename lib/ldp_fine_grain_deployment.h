@@ -24,7 +24,21 @@ extern "C" {
 #include "ldp_status_error.h"
 #include "ldp_log_platform.h"
 
-#if defined(__linux__)
+#if defined(USE_APEX_API)
+
+/* CPU affinity and POSIX scheduling policies are not APEX Process services. */
+typedef struct {
+	int unused;
+} cpu_mask;
+typedef cpu_mask cpu_set_t;
+
+#define LDP_SCHED_OTHER 0
+#define LDP_SCHED_IDLE 0
+#define LDP_SCHED_BATCH 0
+#define LDP_SCHED_FIFO 0
+#define LDP_SCHED_RR 0
+
+#elif defined(__linux__)
 
 #include <stdio.h>
 #include <sched.h>

@@ -12,9 +12,9 @@
 #include <assert.h>
 #include <stdio.h>
 
-#include <time.h>
-#include <pthread.h> //???????????
+#include <stdint.h>
 #include <apr.h>
+#include <apr_thread_cond.h>
 #include <apr_thread_proc.h>
 
 #include "ldp_dynamic_trigger.h"
@@ -130,13 +130,11 @@ void ldp_init_dynamic_trigger(ldp_dyn_trigger_context* ctx){
 		ldp_written_IP_header(ctx->trigger_event_tab[i].parameters, ctx->params_size, 0);
 	}
 
-	pthread_condattr_t attr;
-	pthread_condattr_init(&attr);
-	pthread_condattr_setclock(&attr, CLOCK_MONOTONIC); // or use ldp_get_ecoa_absolute_time instead of ldp_get_time
-	int ret=pthread_cond_init(&ctx->cond, &attr);
-	assert(ret == 0);
-	ret=pthread_mutex_init(&ctx->mutex, NULL);
-	assert(ret == 0);
+	int ret = apr_thread_cond_create(&ctx->cond, ctx->mem_pool);
+	assert(ret == APR_SUCCESS);
+	ret = apr_thread_mutex_create(&ctx->mutex, APR_THREAD_MUTEX_UNNESTED,
+		ctx->mem_pool);
+	assert(ret == APR_SUCCESS);
 
 	UNUSED(ret);
 }
@@ -147,8 +145,8 @@ void ldp_destroy_dynamic_trigger(ldp_dyn_trigger_context* ctx){
 		free(ctx->trigger_event_tab[i].parameters);
 	}
 	free(ctx->trigger_event_tab);
-	pthread_cond_destroy(&ctx->cond);
-	pthread_mutex_destroy(&ctx->mutex);
+	(void)apr_thread_cond_destroy(ctx->cond);
+	(void)apr_thread_mutex_destroy(ctx->mutex);
 }
 
 void ldp_reset_dynamic_trigger(ldp_dyn_trigger_context* ctx){
@@ -156,9 +154,31 @@ void ldp_reset_dynamic_trigger(ldp_dyn_trigger_context* ctx){
 		ctx->trigger_event_tab[i].is_set=0;
 		ctx->trigger_event_tab[i].expiration_date.seconds = TIME_INFINITY;
 	}
-	pthread_mutex_lock(&ctx->mutex);
-	pthread_cond_signal(&ctx->cond);
-	pthread_mutex_unlock(&ctx->mutex);
+	(void)apr_thread_mutex_lock(ctx->mutex);
+	(void)apr_thread_cond_signal(ctx->cond);
+	(void)apr_thread_mutex_unlock(ctx->mutex);
+}
+
+static apr_interval_time_t ldp_dynamic_trigger_wait_timeout(
+	const ldp__timestamp *deadline)
+{
+	ldp__timestamp now;
+	uint64_t seconds;
+	uint64_t nanoseconds;
+
+	ldp_get_time(&now);
+	if (ldp_time_cmp(&now, deadline)) {
+		return 0;
+	}
+	seconds = (uint64_t)deadline->seconds - now.seconds;
+	if (deadline->nanoseconds >= now.nanoseconds) {
+		nanoseconds = deadline->nanoseconds - now.nanoseconds;
+	} else {
+		--seconds;
+		nanoseconds = 1000000000ull + deadline->nanoseconds - now.nanoseconds;
+	}
+	return (apr_interval_time_t)(seconds * APR_USEC_PER_SEC +
+		nanoseconds / 1000u);
 }
 
 void* ldp_start_module_dynamic_trigger(apr_thread_t* t, void* args){
@@ -224,13 +244,13 @@ void* ldp_start_dynamic_trigger(apr_thread_t* t, void* args){
 
 	ldp__timestamp timeout = {0,0};
 	ldp__timestamp current_time= {0,0};
-	struct timespec timeout2= {0,0};
+	apr_interval_time_t timeout_wait;
 	int retval = 0;
 
 	while(ctx->state == RUNNING){
 		timeout.seconds = TIME_INFINITY;
 
-		pthread_mutex_lock(&ctx->mutex);
+		apr_thread_mutex_lock(ctx->mutex);
 		// compute next time_out
 		for(int i= 0 ; i< ctx->max_event_nb;i++){
 			if(ctx->trigger_event_tab[i].is_set == 1){
@@ -241,12 +261,15 @@ void* ldp_start_dynamic_trigger(apr_thread_t* t, void* args){
 			}
 		}
 
-		timeout2.tv_sec = timeout.seconds;
-		timeout2.tv_nsec = timeout.nanoseconds;
-
-		// wait timeout or a wakeup
-		pthread_cond_timedwait(&ctx->cond,&ctx->mutex,&timeout2);
-		pthread_mutex_unlock(&ctx->mutex);
+		/* APR timed waits are relative; LDP trigger deadlines are absolute. */
+		if (timeout.seconds == TIME_INFINITY) {
+			(void)apr_thread_cond_wait(ctx->cond, ctx->mutex);
+		} else {
+			timeout_wait = ldp_dynamic_trigger_wait_timeout(&timeout);
+			(void)apr_thread_cond_timedwait(ctx->cond, ctx->mutex,
+				timeout_wait);
+		}
+		apr_thread_mutex_unlock(ctx->mutex);
 
 		// find events to send
 		ldp_get_time(&current_time);
@@ -285,9 +308,9 @@ ldp_status_t ldp_set_dynamic_trigger(ldp_dyn_trigger_context* ctx, const ECOA__d
 			ctx->trigger_event_tab[i].is_set=1; // now is set
 			ctx->trigger_event_tab[i].handler = handler_fct;
 
-			pthread_mutex_lock(&ctx->mutex);
-			pthread_cond_signal(&ctx->cond);
-			pthread_mutex_unlock(&ctx->mutex);
+			apr_thread_mutex_lock(ctx->mutex);
+			apr_thread_cond_signal(ctx->cond);
+			apr_thread_mutex_unlock(ctx->mutex);
 			return LDP_SUCCESS;
 		}
 	}

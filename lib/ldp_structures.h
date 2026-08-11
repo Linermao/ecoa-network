@@ -155,7 +155,9 @@ typedef struct ldp_trigger_context{
 
 	// ----specific for trigger module ---- //
 	ldp_logger* logger;//!< Logger for ECOA messages
+#ifndef USE_APEX_API
 	pthread_barrier_t barr; //!< used during initialization to synchronized timer creations and timer startings
+#endif
 	int nb_trigger_event; //!< number of trigger events in trigger_events array
 	ldp_trigger_event_context* trigger_events; //!< array of trigger events
 
@@ -188,8 +190,8 @@ typedef struct ldp_dyn_trigger_context_t{
 	// ---- specific for dynamic trigger module ---- //
 	int max_event_nb; //!< maximal number of waiting events
 	ldp_dyn_trigger_event* trigger_event_tab; //!< array of ldp_dyn_trigger_event
-	pthread_cond_t cond; //!< pthread condition to wakup trigger thread (to check expired event or to add a new one)
-	pthread_mutex_t mutex; //!< mutex of the pthread condition
+	apr_thread_cond_t *cond; //!< condition used to wake the trigger process
+	apr_thread_mutex_t *mutex; //!< mutex protecting the trigger condition
 	int params_size; //!< size of parameters
 
 
