@@ -34,7 +34,8 @@ endif()
 
 if(USE_APEX_API)
 	set(${PROJECT_NAME}_platform_src
-		${CMAKE_CURRENT_LIST_DIR}/apex/ldp_thread.c)
+		${CMAKE_CURRENT_LIST_DIR}/apex/ldp_thread.c
+		${CMAKE_CURRENT_LIST_DIR}/apex/ldp_fine_grain_deployment.c)
 elseif(UNIX)
 	file(GLOB ${PROJECT_NAME}_platform_src unix/*.c)
 elseif(WIN32)
